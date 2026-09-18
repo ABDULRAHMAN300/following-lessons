@@ -1,6 +1,1 @@
-{
-  "db": false,
-  "r2": false,
-  "kv": false,
-  "durableObject": null
-}
+{"db":true,"r2":false,"kv":false,"durableObject":null}
