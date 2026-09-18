@@ -11,10 +11,10 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
+import { Route as OwnerLessonsRouteImport } from './routes/owner-lessons'
+import { Route as OwnerAuthRouteImport } from './routes/owner-auth'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ApiLessonsRouteImport } from './routes/api/lessons'
-import { Route as ApiAuthRouteImport } from './routes/api/auth'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
@@ -24,6 +24,16 @@ const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
 const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
   id: '/robots.txt',
   path: '/robots.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OwnerLessonsRoute = OwnerLessonsRouteImport.update({
+  id: '/owner-lessons',
+  path: '/owner-lessons',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OwnerAuthRoute = OwnerAuthRouteImport.update({
+  id: '/owner-auth',
+  path: '/owner-auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -36,66 +46,66 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiLessonsRoute = ApiLessonsRouteImport.update({
-  id: '/api/lessons',
-  path: '/api/lessons',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiAuthRoute = ApiAuthRouteImport.update({
-  id: '/api/auth',
-  path: '/api/auth',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
+  '/owner-auth': typeof OwnerAuthRoute
+  '/owner-lessons': typeof OwnerLessonsRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/api/auth': typeof ApiAuthRoute
-  '/api/lessons': typeof ApiLessonsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
+  '/owner-auth': typeof OwnerAuthRoute
+  '/owner-lessons': typeof OwnerLessonsRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/api/auth': typeof ApiAuthRoute
-  '/api/lessons': typeof ApiLessonsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRoute
+  '/owner-auth': typeof OwnerAuthRoute
+  '/owner-lessons': typeof OwnerLessonsRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/api/auth': typeof ApiAuthRoute
-  '/api/lessons': typeof ApiLessonsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/app' | '/robots.txt' | '/sitemap.xml' | '/api/auth' | '/api/lessons'
+    | '/'
+    | '/app'
+    | '/owner-auth'
+    | '/owner-lessons'
+    | '/robots.txt'
+    | '/sitemap.xml'
   fileRoutesByTo: FileRoutesByTo
   to:
-    '/' | '/app' | '/robots.txt' | '/sitemap.xml' | '/api/auth' | '/api/lessons'
+    | '/'
+    | '/app'
+    | '/owner-auth'
+    | '/owner-lessons'
+    | '/robots.txt'
+    | '/sitemap.xml'
   id:
     | '__root__'
     | '/'
     | '/app'
+    | '/owner-auth'
+    | '/owner-lessons'
     | '/robots.txt'
     | '/sitemap.xml'
-    | '/api/auth'
-    | '/api/lessons'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRoute
+  OwnerAuthRoute: typeof OwnerAuthRoute
+  OwnerLessonsRoute: typeof OwnerLessonsRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
-  ApiAuthRoute: typeof ApiAuthRoute
-  ApiLessonsRoute: typeof ApiLessonsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -114,6 +124,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RobotsDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/owner-lessons': {
+      id: '/owner-lessons'
+      path: '/owner-lessons'
+      fullPath: '/owner-lessons'
+      preLoaderRoute: typeof OwnerLessonsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/owner-auth': {
+      id: '/owner-auth'
+      path: '/owner-auth'
+      fullPath: '/owner-auth'
+      preLoaderRoute: typeof OwnerAuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app': {
       id: '/app'
       path: '/app'
@@ -128,30 +152,16 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/lessons': {
-      id: '/api/lessons'
-      path: '/api/lessons'
-      fullPath: '/api/lessons'
-      preLoaderRoute: typeof ApiLessonsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/auth': {
-      id: '/api/auth'
-      path: '/api/auth'
-      fullPath: '/api/auth'
-      preLoaderRoute: typeof ApiAuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRoute,
+  OwnerAuthRoute: OwnerAuthRoute,
+  OwnerLessonsRoute: OwnerLessonsRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
-  ApiAuthRoute: ApiAuthRoute,
-  ApiLessonsRoute: ApiLessonsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
