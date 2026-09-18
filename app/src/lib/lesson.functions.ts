@@ -56,6 +56,9 @@ const appearanceMutation = z.object({
   primaryColor: hexColor,
   accentColor: hexColor,
   backgroundColor: hexColor,
+  chemistryColor: hexColor,
+  physicsColor: hexColor,
+  integratedColor: hexColor,
 });
 
 export type Lesson = {
@@ -150,7 +153,7 @@ export const getAppearance = createServerFn({ method: "GET" }).handler(async () 
     return { ok: false as const, code: "unauthorized" as const, appearance: defaultAppearance };
   const row = await database()
     .prepare(
-      "SELECT primary_color AS primaryColor,accent_color AS accentColor,background_color AS backgroundColor FROM appearance_settings WHERE owner_id=?",
+      "SELECT primary_color AS primaryColor,accent_color AS accentColor,background_color AS backgroundColor,chemistry_color AS chemistryColor,physics_color AS physicsColor,integrated_color AS integratedColor FROM appearance_settings WHERE owner_id=?",
     )
     .bind(user.id)
     .first<Appearance>();
@@ -165,13 +168,16 @@ export const updateAppearance = createServerFn({ method: "POST" })
       return { ok: false as const, code: "unauthorized" as const, error: "يلزم تسجيل الدخول" };
     await database()
       .prepare(
-        "INSERT INTO appearance_settings(owner_id,primary_color,accent_color,background_color,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(owner_id) DO UPDATE SET primary_color=excluded.primary_color,accent_color=excluded.accent_color,background_color=excluded.background_color,updated_at=excluded.updated_at",
+        "INSERT INTO appearance_settings(owner_id,primary_color,accent_color,background_color,chemistry_color,physics_color,integrated_color,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(owner_id) DO UPDATE SET primary_color=excluded.primary_color,accent_color=excluded.accent_color,background_color=excluded.background_color,chemistry_color=excluded.chemistry_color,physics_color=excluded.physics_color,integrated_color=excluded.integrated_color,updated_at=excluded.updated_at",
       )
       .bind(
         user.id,
         data.primaryColor,
         data.accentColor,
         data.backgroundColor,
+        data.chemistryColor,
+        data.physicsColor,
+        data.integratedColor,
         new Date().toISOString(),
       )
       .run();

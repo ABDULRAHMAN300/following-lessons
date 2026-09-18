@@ -179,8 +179,14 @@ function Workspace() {
   const completed = selected.filter((lesson) => lesson.completed).length;
   const percent = selected.length ? Math.round((completed / selected.length) * 100) : 0;
   const activeAppearance = appearanceOpen ? appearanceDraft : appearance;
+  const subjectColors: Record<Subject, string> = {
+    chemistry: activeAppearance.chemistryColor,
+    physics: activeAppearance.physicsColor,
+    integrated: activeAppearance.integratedColor,
+  };
   const appearanceStyle = {
     "--forest": activeAppearance.primaryColor,
+    "--subject": subjectColors[subject],
     "--deep": `color-mix(in srgb, ${activeAppearance.primaryColor} 78%, black)`,
     "--mist": activeAppearance.backgroundColor,
     "--paper": `color-mix(in srgb, ${activeAppearance.backgroundColor} 35%, white)`,
@@ -358,11 +364,13 @@ function Workspace() {
         <nav className="subject-rail" aria-label="المواد">
           {subjects.map((item, itemIndex) => {
             const count = lessons.filter((lesson) => lesson.subject === item.id).length;
+            const itemColor = subjectColors[item.id];
             return (
               <button
                 type="button"
                 key={item.id}
                 className={item.id === subject ? "subject-card active" : "subject-card"}
+                style={{ "--subject-color": itemColor } as CSSProperties}
                 onClick={() => {
                   setSubject(item.id);
                   setGrade(item.grades[0]);
@@ -524,7 +532,10 @@ function AppearancePanel({
             const active =
               preset.primaryColor === value.primaryColor &&
               preset.accentColor === value.accentColor &&
-              preset.backgroundColor === value.backgroundColor;
+              preset.backgroundColor === value.backgroundColor &&
+              preset.chemistryColor === value.chemistryColor &&
+              preset.physicsColor === value.physicsColor &&
+              preset.integratedColor === value.integratedColor;
             return (
               <button
                 type="button"
@@ -535,6 +546,9 @@ function AppearancePanel({
                     primaryColor: preset.primaryColor,
                     accentColor: preset.accentColor,
                     backgroundColor: preset.backgroundColor,
+                    chemistryColor: preset.chemistryColor,
+                    physicsColor: preset.physicsColor,
+                    integratedColor: preset.integratedColor,
                   })
                 }
               >
@@ -550,6 +564,7 @@ function AppearancePanel({
           })}
         </div>
 
+        <h4 className="appearance-group-title">ألوان الواجهة</h4>
         <div className="color-fields">
           <ColorField
             label="اللون الرئيسي"
@@ -568,6 +583,28 @@ function AppearancePanel({
             hint="يفضل لونًا فاتحًا"
             value={value.backgroundColor}
             onChange={(backgroundColor) => onChange({ ...value, backgroundColor })}
+          />
+        </div>
+
+        <h4 className="appearance-group-title">ألوان المواد</h4>
+        <div className="color-fields subject-color-fields">
+          <ColorField
+            label="الكيمياء"
+            hint="بطاقات ودروس الكيمياء"
+            value={value.chemistryColor}
+            onChange={(chemistryColor) => onChange({ ...value, chemistryColor })}
+          />
+          <ColorField
+            label="الفيزياء"
+            hint="بطاقات ودروس الفيزياء"
+            value={value.physicsColor}
+            onChange={(physicsColor) => onChange({ ...value, physicsColor })}
+          />
+          <ColorField
+            label="العلوم المتكاملة"
+            hint="بطاقات ودروس العلوم المتكاملة"
+            value={value.integratedColor}
+            onChange={(integratedColor) => onChange({ ...value, integratedColor })}
           />
         </div>
 

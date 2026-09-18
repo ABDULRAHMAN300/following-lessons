@@ -136,3 +136,20 @@
   .appearance-panel{height:94svh;padding-inline:14px}
   .appearance-panel>footer{margin-inline:-14px;padding-inline:14px}
 }
+
+/* Independent, editable subject colors */
+.subject-card:after{background:var(--subject-color,var(--coral))}
+.subject-card>svg{color:var(--subject-color,var(--coral))}
+.subject-card.active{background:color-mix(in srgb,var(--subject-color,var(--forest)) 78%,black)}
+.subject-card.active>svg{color:var(--paper)}
+.workspace-banner .eyebrow{color:var(--subject,var(--coral))}
+.progress-ring{background:radial-gradient(circle at center,var(--deep) 61%,transparent 62%),conic-gradient(var(--subject,var(--coral)) var(--progress),rgba(248,251,249,.13) 0)}
+.lesson-heading h3{color:color-mix(in srgb,var(--subject,var(--forest)) 78%,black)}
+.grade-tabs button.active,.filter-tabs button.active{background:color-mix(in srgb,var(--subject,var(--forest)) 82%,black);border-color:var(--subject,var(--forest))}
+.add-lesson{border-color:var(--subject,var(--forest))}
+.add-lesson>span{background:color-mix(in srgb,var(--subject,var(--forest)) 82%,black)}
+.complete-toggle{border-color:var(--subject,var(--forest))}
+.complete .complete-toggle{background:var(--subject,var(--coral));border-color:var(--subject,var(--coral))}
+.appearance-group-title{margin:28px 0 0;padding-top:24px;border-top:1px solid var(--line);font-size:15px}
+.appearance-group-title+.color-fields{margin-top:12px}
+.subject-color-fields .color-field{border-inline-start:4px solid color-mix(in srgb,var(--forest) 18%,transparent)}
