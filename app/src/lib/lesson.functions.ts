@@ -1,9 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
+import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import {
-  clearAuthFailures, clearSession, createSession, database, expiredSessionCookie,
-  getSessionUser, hashPassword, isRateLimited, recordAuthFailure, sessionCookie, verifyPassword,
+  clearAuthFailures, clearSession, createSession, database, expireSessionCookies,
+  getSessionUser, hashPassword, isRateLimited, recordAuthFailure, setSessionCookies, verifyPassword,
 } from "./auth.server";
 
 const credentials=z.object({email:z.string().trim().toLowerCase().email().max(180),password:z.string().min(10).max(128)});
@@ -33,7 +33,7 @@ export const authenticateOwner=createServerFn({method:"POST"}).validator(authSch
   const request=getRequest();
   if(data.action==="logout"){
     await clearSession(request);
-    setResponseHeader("set-cookie",expiredSessionCookie());
+    expireSessionCookies();
     return{ok:true as const};
   }
   if(await isRateLimited(request))return{ok:false as const,error:"محاولات كثيرة. حاول بعد 15 دقيقة"};
@@ -45,7 +45,7 @@ export const authenticateOwner=createServerFn({method:"POST"}).validator(authSch
     try{await database().prepare("INSERT INTO users(id,singleton,email,password_hash,password_salt) VALUES(?,1,?,?,?)").bind(id,email,hash,salt).run()}
     catch{return{ok:false as const,error:"تم إنشاء الحساب الخاص بالفعل"}}
     const token=await createSession(id);
-    setResponseHeader("set-cookie",sessionCookie(token));
+    setSessionCookies(token);
     await clearAuthFailures(request);
     return{ok:true as const};
   }
@@ -53,7 +53,7 @@ export const authenticateOwner=createServerFn({method:"POST"}).validator(authSch
   const valid=user?await verifyPassword(password,user.password_hash,user.password_salt):(await hashPassword(password),false);
   if(!user||!valid){await recordAuthFailure(request);return{ok:false as const,error:"بيانات الدخول غير صحيحة"}}
   const token=await createSession(user.id);
-  setResponseHeader("set-cookie",sessionCookie(token));
+  setSessionCookies(token);
   await clearAuthFailures(request);
   return{ok:true as const};
 });

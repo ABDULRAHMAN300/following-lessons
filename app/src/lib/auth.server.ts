@@ -1,6 +1,7 @@
 import type { D1Database } from "@cloudflare/workers-types";
+import { setCookie } from "@tanstack/react-start/server";
 import { bindings } from "@/lib/bindings.server";
-const COOKIE="fl_session",SESSION_DAYS=30,PBKDF2_ITERATIONS=100000,enc=new TextEncoder();
+const COOKIE="fl_session",EMBED_COOKIE="fl_session_embed",SESSION_DAYS=30,PBKDF2_ITERATIONS=100000,enc=new TextEncoder();
 export type SessionUser={id:string;email:string};
 export function database():D1Database{const db=bindings().DB;if(!db)throw new Error("Database binding is unavailable");return db}
 function bytesToBase64(bytes:Uint8Array){let binary="";for(const byte of bytes)binary+=String.fromCharCode(byte);return btoa(binary)}
@@ -12,11 +13,12 @@ export async function verifyPassword(password:string,expectedHash:string,salt:st
 export function verifyMutationRequest(request:Request){if(request.headers.get("x-following-lessons")!=="1")throw new Response("طلب غير صالح",{status:403});const origin=request.headers.get("origin");if(origin&&origin!==new URL(request.url).origin)throw new Response("طلب غير صالح",{status:403})}
 function parseCookie(request:Request,name:string){const raw=request.headers.get("cookie")??"";for(const part of raw.split(";")){const[key,...rest]=part.trim().split("=");if(key===name)return decodeURIComponent(rest.join("="))}return null}
 export async function createSession(userId:string){const token=randomToken(),tokenHash=await sha256(token),expiresAt=new Date(Date.now()+SESSION_DAYS*86400000).toISOString();await database().prepare("INSERT INTO sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").bind(tokenHash,userId,expiresAt).run();return token}
-export function sessionCookie(token:string){return`${COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_DAYS*86400}`}
-export function expiredSessionCookie(){return`${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`}
-export async function getSessionUser(request:Request){const token=parseCookie(request,COOKIE);if(!token)return null;const tokenHash=await sha256(token);return await database().prepare("SELECT users.id,users.email FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=? AND sessions.expires_at>?").bind(tokenHash,new Date().toISOString()).first<SessionUser>()??null}
+export function setSessionCookies(token:string){const shared={path:"/",httpOnly:true,secure:true,maxAge:SESSION_DAYS*86400}as const;setCookie(COOKIE,token,{...shared,sameSite:"lax"});setCookie(EMBED_COOKIE,token,{...shared,sameSite:"none",partitioned:true})}
+export function expireSessionCookies(){const shared={path:"/",httpOnly:true,secure:true,maxAge:0}as const;setCookie(COOKIE,"",{...shared,sameSite:"lax"});setCookie(EMBED_COOKIE,"",{...shared,sameSite:"none",partitioned:true})}
+function sessionTokens(request:Request){return[parseCookie(request,COOKIE),parseCookie(request,EMBED_COOKIE)].filter((token):token is string=>Boolean(token))}
+export async function getSessionUser(request:Request){for(const token of sessionTokens(request)){const tokenHash=await sha256(token),user=await database().prepare("SELECT users.id,users.email FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=? AND sessions.expires_at>?").bind(tokenHash,new Date().toISOString()).first<SessionUser>();if(user)return user}return null}
 export async function requireSessionUser(request:Request){const user=await getSessionUser(request);if(!user)throw new Response("يلزم تسجيل الدخول",{status:401});return user}
-export async function clearSession(request:Request){const token=parseCookie(request,COOKIE);if(token)await database().prepare("DELETE FROM sessions WHERE token_hash=?").bind(await sha256(token)).run()}
+export async function clearSession(request:Request){for(const token of new Set(sessionTokens(request)))await database().prepare("DELETE FROM sessions WHERE token_hash=?").bind(await sha256(token)).run()}
 async function attemptKey(request:Request){const ip=request.headers.get("cf-connecting-ip")??"unknown",agent=request.headers.get("user-agent")?.slice(0,160)??"unknown";return sha256(`${ip}:${agent}`)}
 export async function isRateLimited(request:Request){const key=await attemptKey(request),row=await database().prepare("SELECT attempts,window_start FROM auth_attempts WHERE attempt_key=?").bind(key).first<{attempts:number;window_start:string}>();return!!row&&Date.now()-Date.parse(row.window_start)<900000&&row.attempts>=8}
 export async function recordAuthFailure(request:Request){const key=await attemptKey(request),now=new Date().toISOString(),row=await database().prepare("SELECT attempts,window_start FROM auth_attempts WHERE attempt_key=?").bind(key).first<{attempts:number;window_start:string}>();if(!row||Date.now()-Date.parse(row.window_start)>=900000)await database().prepare("INSERT INTO auth_attempts(attempt_key,attempts,window_start) VALUES(?,1,?) ON CONFLICT(attempt_key) DO UPDATE SET attempts=1,window_start=excluded.window_start").bind(key,now).run();else await database().prepare("UPDATE auth_attempts SET attempts=attempts+1 WHERE attempt_key=?").bind(key).run()}
