@@ -50,7 +50,8 @@
 @keyframes panel-in{from{opacity:0;transform:translateX(-28px)}}
 
 @media(max-width:620px){
-  body{overflow-x:hidden}
+  html,body{overflow-x:clip}
+  .journey .scroll-scrub__copy:before{inset:-3rem 0}
   .workspace{padding:34px 10px}
   .workspace:before{display:none}
   .workspace-banner{min-height:380px;padding:26px 20px;gap:24px;background-size:auto 70%}
