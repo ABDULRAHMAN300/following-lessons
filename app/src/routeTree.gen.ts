@@ -11,8 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
-import { Route as OwnerLessonsRouteImport } from './routes/owner-lessons'
-import { Route as OwnerAuthRouteImport } from './routes/owner-auth'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -24,16 +22,6 @@ const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
 const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
   id: '/robots.txt',
   path: '/robots.txt',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OwnerLessonsRoute = OwnerLessonsRouteImport.update({
-  id: '/owner-lessons',
-  path: '/owner-lessons',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OwnerAuthRoute = OwnerAuthRouteImport.update({
-  id: '/owner-auth',
-  path: '/owner-auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -50,16 +38,12 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
-  '/owner-auth': typeof OwnerAuthRoute
-  '/owner-lessons': typeof OwnerLessonsRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
-  '/owner-auth': typeof OwnerAuthRoute
-  '/owner-lessons': typeof OwnerLessonsRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
 }
@@ -67,43 +51,20 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRoute
-  '/owner-auth': typeof OwnerAuthRoute
-  '/owner-lessons': typeof OwnerLessonsRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/app'
-    | '/owner-auth'
-    | '/owner-lessons'
-    | '/robots.txt'
-    | '/sitemap.xml'
+  fullPaths: '/' | '/app' | '/robots.txt' | '/sitemap.xml'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/app'
-    | '/owner-auth'
-    | '/owner-lessons'
-    | '/robots.txt'
-    | '/sitemap.xml'
-  id:
-    | '__root__'
-    | '/'
-    | '/app'
-    | '/owner-auth'
-    | '/owner-lessons'
-    | '/robots.txt'
-    | '/sitemap.xml'
+  to: '/' | '/app' | '/robots.txt' | '/sitemap.xml'
+  id: '__root__' | '/' | '/app' | '/robots.txt' | '/sitemap.xml'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRoute
-  OwnerAuthRoute: typeof OwnerAuthRoute
-  OwnerLessonsRoute: typeof OwnerLessonsRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
 }
@@ -122,20 +83,6 @@ declare module '@tanstack/react-router' {
       path: '/robots.txt'
       fullPath: '/robots.txt'
       preLoaderRoute: typeof RobotsDottxtRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/owner-lessons': {
-      id: '/owner-lessons'
-      path: '/owner-lessons'
-      fullPath: '/owner-lessons'
-      preLoaderRoute: typeof OwnerLessonsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/owner-auth': {
-      id: '/owner-auth'
-      path: '/owner-auth'
-      fullPath: '/owner-auth'
-      preLoaderRoute: typeof OwnerAuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app': {
@@ -158,8 +105,6 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRoute,
-  OwnerAuthRoute: OwnerAuthRoute,
-  OwnerLessonsRoute: OwnerLessonsRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
 }
