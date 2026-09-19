@@ -4,6 +4,11 @@ import { z } from "zod";
 import { database, getSessionUser } from "./auth.server";
 
 const gradeSchema=z.union([z.literal(10),z.literal(11),z.literal(12)]);
+const isoDate=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value=>{
+  const [year,month,day]=value.split("-").map(Number);
+  const parsed=new Date(Date.UTC(year,month-1,day));
+  return parsed.getUTCFullYear()===year&&parsed.getUTCMonth()===month-1&&parsed.getUTCDate()===day;
+},{message:"تاريخ الاستلام غير صحيح"});
 const studentMutation=z.discriminatedUnion("action",[
   z.object({action:z.literal("create"),name:z.string().trim().min(1).max(120),grade:gradeSchema,groupName:z.string().trim().max(60).default(""),note:z.string().trim().max(400).default("")}),
   z.object({action:z.literal("update"),id:z.string().uuid(),name:z.string().trim().min(1).max(120),grade:gradeSchema,groupName:z.string().trim().max(60).default(""),note:z.string().trim().max(400).default("")}),
@@ -11,15 +16,15 @@ const studentMutation=z.discriminatedUnion("action",[
 ]);
 const receiptSave=z.object({
   action:z.literal("save"),studentIds:z.array(z.string().uuid()).min(1).max(250),lessonId:z.string().uuid(),
-  worksheet:z.boolean(),memo:z.boolean(),receivedAt:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  note:z.string().trim().max(300).default(""),mode:z.enum(["replace","merge"])
-}).refine(v=>v.worksheet||v.memo,{message:"اختر نوعًا واحدًا على الأقل"});
+  receivedAt:isoDate,note:z.string().trim().max(300).default(""),mode:z.enum(["replace","merge"])
+});
 const receiptMutation=z.union([receiptSave,z.object({action:z.literal("delete"),id:z.string().uuid()})]);
 
 export type StudentRecord={id:string;name:string;grade:10|11|12;groupName:string;note:string;createdAt:string;updatedAt:string};
 export type StudentReceipt={id:string;studentId:string;lessonId:string;lessonTitle:string;subject:"chemistry"|"physics";grade:10|11|12;worksheet:boolean;memo:boolean;receivedAt:string;note:string;createdAt:string;updatedAt:string};
 type StudentRow={id:string;name:string;grade:10|11|12;group_name:string;note:string;created_at:string;updated_at:string};
 type ReceiptRow={id:string;student_id:string;lesson_id:string;lesson_title:string;subject:"chemistry"|"physics";grade:10|11|12;worksheet_received:number;memo_received:number;received_at:string;note:string;created_at:string;updated_at:string};
+type LessonTarget={id:string;subject:"chemistry"|"physics";grade:10|11|12;position:number};
 const studentOut=(r:StudentRow):StudentRecord=>({id:r.id,name:r.name,grade:r.grade,groupName:r.group_name,note:r.note,createdAt:r.created_at,updatedAt:r.updated_at});
 const receiptOut=(r:ReceiptRow):StudentReceipt=>({id:r.id,studentId:r.student_id,lessonId:r.lesson_id,lessonTitle:r.lesson_title,subject:r.subject,grade:r.grade,worksheet:Boolean(r.worksheet_received),memo:Boolean(r.memo_received),receivedAt:r.received_at,note:r.note,createdAt:r.created_at,updatedAt:r.updated_at});
 
@@ -60,20 +65,28 @@ export const mutateReceipt=createServerFn({method:"POST"}).validator(receiptMuta
     await database().prepare("DELETE FROM student_receipts WHERE id=? AND owner_id=?").bind(data.id,user.id).run();
     return {ok:true as const};
   }
-  const lesson=await database().prepare("SELECT id,subject,grade FROM lessons WHERE id=? AND owner_id=? AND subject IN ('chemistry','physics')").bind(data.lessonId,user.id).first<{id:string;subject:string;grade:number}>();
+  const lesson=await database().prepare("SELECT id,subject,grade,position FROM lessons WHERE id=? AND owner_id=? AND subject IN ('chemistry','physics')").bind(data.lessonId,user.id).first<LessonTarget>();
   if(!lesson)return {ok:false as const,error:"الدرس غير موجود"};
-  const marks=data.studentIds.map(()=>"?").join(",");
-  const valid=await database().prepare(`SELECT id FROM students WHERE owner_id=? AND grade=? AND id IN (${marks})`).bind(user.id,lesson.grade,...data.studentIds).all<{id:string}>();
-  const ids=(valid.results??[]).map(r=>r.id);
-  if(ids.length!==new Set(data.studentIds).size)return {ok:false as const,error:"بعض الطلاب لا ينتمون إلى صف الدرس"};
+  const earlier=await database().prepare("SELECT id FROM lessons WHERE owner_id=? AND subject=? AND grade=? AND position<=? ORDER BY position,created_at").bind(user.id,lesson.subject,lesson.grade,lesson.position).all<{id:string}>();
+  const lessonIds=(earlier.results??[]).map(row=>row.id);
+  if(!lessonIds.includes(data.lessonId))return {ok:false as const,error:"تعذر تحديد تسلسل الدروس"};
+
+  const uniqueStudentIds=[...new Set(data.studentIds)];
+  const marks=uniqueStudentIds.map(()=>"?").join(",");
+  const valid=await database().prepare(`SELECT id FROM students WHERE owner_id=? AND grade=? AND id IN (${marks})`).bind(user.id,lesson.grade,...uniqueStudentIds).all<{id:string}>();
+  const ids=(valid.results??[]).map(row=>row.id);
+  if(ids.length!==uniqueStudentIds.length)return {ok:false as const,error:"بعض الطلاب لا ينتمون إلى صف الدرس"};
+
   const now=new Date().toISOString();
-  const statements=ids.map(studentId=>{
-    const id=crypto.randomUUID();
-    if(data.mode==="merge"){
-      return database().prepare("INSERT INTO student_receipts(id,owner_id,student_id,lesson_id,worksheet_received,memo_received,received_at,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(student_id,lesson_id) DO UPDATE SET worksheet_received=MAX(student_receipts.worksheet_received,excluded.worksheet_received),memo_received=MAX(student_receipts.memo_received,excluded.memo_received),received_at=excluded.received_at,note=CASE WHEN excluded.note='' THEN student_receipts.note ELSE excluded.note END,updated_at=excluded.updated_at").bind(id,user.id,studentId,data.lessonId,Number(data.worksheet),Number(data.memo),data.receivedAt,data.note,now,now);
-    }
-    return database().prepare("INSERT INTO student_receipts(id,owner_id,student_id,lesson_id,worksheet_received,memo_received,received_at,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(student_id,lesson_id) DO UPDATE SET worksheet_received=excluded.worksheet_received,memo_received=excluded.memo_received,received_at=excluded.received_at,note=excluded.note,updated_at=excluded.updated_at").bind(id,user.id,studentId,data.lessonId,Number(data.worksheet),Number(data.memo),data.receivedAt,data.note,now,now);
-  });
+  const statements=ids.flatMap(studentId=>lessonIds.map(lessonId=>{
+    const isSelected=lessonId===data.lessonId;
+    const note=isSelected?data.note:"";
+    const replaceSelected=data.mode==="replace"&&isSelected;
+    const sql=replaceSelected
+      ?"INSERT INTO student_receipts(id,owner_id,student_id,lesson_id,worksheet_received,memo_received,received_at,note,created_at,updated_at) VALUES(?,?,?,?,0,1,?,?,?,?) ON CONFLICT(student_id,lesson_id) DO UPDATE SET worksheet_received=0,memo_received=1,received_at=excluded.received_at,note=excluded.note,updated_at=excluded.updated_at"
+      :"INSERT INTO student_receipts(id,owner_id,student_id,lesson_id,worksheet_received,memo_received,received_at,note,created_at,updated_at) VALUES(?,?,?,?,0,1,?,?,?,?) ON CONFLICT(student_id,lesson_id) DO UPDATE SET worksheet_received=0,memo_received=1,received_at=excluded.received_at,note=CASE WHEN excluded.note='' THEN student_receipts.note ELSE excluded.note END,updated_at=excluded.updated_at";
+    return database().prepare(sql).bind(crypto.randomUUID(),user.id,studentId,lessonId,data.receivedAt,note,now,now);
+  }));
   await database().batch(statements);
-  return {ok:true as const,count:ids.length};
+  return {ok:true as const,count:statements.length,lessonCount:lessonIds.length};
 });
