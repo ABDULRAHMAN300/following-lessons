@@ -5,6 +5,7 @@ import {
   Check,
   CloudArrowDown,
   CloudCheck,
+  ClipboardText,
   Flask,
   Leaf,
   LockKey,
@@ -14,11 +15,13 @@ import {
   Plus,
   SignOut,
   Trash,
+  UsersThree,
   WaveSine,
   WifiSlash,
   X,
 } from "@phosphor-icons/react";
 import { ScrollScrub } from "@/components/scroll-scrub/scroll-scrub";
+import { StudentTracker } from "@/components/student-tracker";
 import { scrollScrubScenes, scrollScrubTheme } from "@/scroll-scrub-scenes";
 import { appearancePresets, defaultAppearance, type Appearance } from "@/lib/appearance";
 import {
@@ -67,7 +70,7 @@ function Index() {
           <b>Following Lessons</b>
         </a>
         <a className="nav-entry" href="#workspace">
-          افتح مساحة الدروس
+          افتح مساحة المتابعة
         </a>
       </header>
       <section className="journey" aria-label="مقدمة متحركة">
@@ -95,6 +98,8 @@ function Workspace() {
   const [appearance, setAppearance] = useState<Appearance>(defaultAppearance);
   const [appearanceDraft, setAppearanceDraft] = useState<Appearance>(defaultAppearance);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState<"lessons" | "students">("lessons");
+  const [studentRefreshKey, setStudentRefreshKey] = useState(0);
   const savedTimer = useRef<number | null>(null);
 
   function markSaved() {
@@ -186,7 +191,7 @@ function Workspace() {
   };
   const appearanceStyle = {
     "--forest": activeAppearance.primaryColor,
-    "--subject": subjectColors[subject],
+    "--subject": workspaceView === "students" ? activeAppearance.primaryColor : subjectColors[subject],
     "--deep": `color-mix(in srgb, ${activeAppearance.primaryColor} 78%, black)`,
     "--mist": activeAppearance.backgroundColor,
     "--paper": `color-mix(in srgb, ${activeAppearance.backgroundColor} 35%, white)`,
@@ -303,27 +308,20 @@ function Workspace() {
       <div className="workspace-inner">
         <header className="workspace-banner">
           <div className="banner-copy">
-            <span className="eyebrow">مساحة خاصة ومزامنة تلقائية</span>
-            <h2>مخطط الدروس</h2>
-            <p>اختر المادة والصف، ثم أضف الدروس وحدّث إنجازها بلمسة واحدة.</p>
+            <span className="eyebrow">{workspaceView === "lessons" ? "مساحة خاصة ومزامنة تلقائية" : "سجل الاستلام والمذكرات"}</span>
+            <h2>{workspaceView === "lessons" ? "مخطط الدروس" : "متابعة الطلاب"}</h2>
+            <p>{workspaceView === "lessons" ? "اختر المادة والصف، ثم أضف الدروس وحدّث إنجازها بلمسة واحدة." : "أضف الطلاب وسجّل استلام أوراق الدرس أو المذكرة بصورة فردية أو جماعية."}</p>
           </div>
-          <div className="progress-wrap" aria-label={`اكتمل ${percent}%`}>
-            <div
-              className="progress-ring"
-              style={{ "--progress": `${percent * 3.6}deg` } as CSSProperties}
-            >
-              <strong>{percent}%</strong>
-              <span>مكتمل</span>
+          {workspaceView === "lessons" ? (
+            <div className="progress-wrap" aria-label={`اكتمل ${percent}%`}>
+              <div className="progress-ring" style={{ "--progress": `${percent * 3.6}deg` } as CSSProperties}>
+                <strong>{percent}%</strong><span>مكتمل</span>
+              </div>
+              <div className="progress-caption"><b>{completed} من {selected.length}</b><span>في {activeSubject.name} للصف {grade}</span></div>
             </div>
-            <div className="progress-caption">
-              <b>
-                {completed} من {selected.length}
-              </b>
-              <span>
-                في {activeSubject.name} للصف {grade}
-              </span>
-            </div>
-          </div>
+          ) : (
+            <div className="student-banner-mark"><UsersThree weight="duotone" /><b>فردي وجماعي</b><span>سجل واضح على كل أجهزتك</span></div>
+          )}
         </header>
 
         <div className="workspace-topline">
@@ -352,7 +350,7 @@ function Workspace() {
             >
               <PaintBrushBroad /> <span>المظهر</span>
             </button>
-            <button type="button" onClick={() => void loadWorkspace()} aria-label="تحديث الدروس">
+            <button type="button" onClick={() => { void loadWorkspace(); setStudentRefreshKey((value) => value + 1); }} aria-label="تحديث البيانات">
               <CloudArrowDown /> <span className="action-label">تحديث</span>
             </button>
             <button type="button" onClick={() => void logout()}>
@@ -361,6 +359,11 @@ function Workspace() {
           </div>
         </div>
 
+        <div className="workspace-switch" role="tablist" aria-label="أقسام التطبيق">
+          <button type="button" role="tab" aria-selected={workspaceView === "lessons"} className={workspaceView === "lessons" ? "active" : ""} onClick={() => setWorkspaceView("lessons")}><ClipboardText weight="duotone" /> الدروس</button>
+          <button type="button" role="tab" aria-selected={workspaceView === "students"} className={workspaceView === "students" ? "active" : ""} onClick={() => setWorkspaceView("students")}><UsersThree weight="duotone" /> متابعة الطلاب</button>
+        </div>
+        {workspaceView === "lessons" ? (<>
         <nav className="subject-rail" aria-label="المواد">
           {subjects.map((item, itemIndex) => {
             const count = lessons.filter((lesson) => lesson.subject === item.id).length;
@@ -456,6 +459,9 @@ function Workspace() {
             {!visible.length && <EmptyState hasLessons={selected.length > 0} />}
           </div>
         </div>
+        </>) : (
+          <StudentTracker lessons={lessons} online={online} refreshKey={studentRefreshKey} chemistryColor={activeAppearance.chemistryColor} physicsColor={activeAppearance.physicsColor} onUnauthorized={() => setAuth("guest")} />
+        )}
       </div>
 
       {appearanceOpen && (
