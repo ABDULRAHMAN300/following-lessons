@@ -37,9 +37,10 @@ import {
 export const Route = createFileRoute("/")({ component: Index });
 
 type Subject = "chemistry" | "physics" | "integrated";
+type SciencePart = "" | "physics" | "chemistry";
 type Filter = "all" | "open" | "done";
 type LessonMutation =
-  | { action: "create"; subject: Subject; grade: 10 | 11 | 12; title: string }
+  | { action: "create"; subject: Subject; grade: 10 | 11 | 12; title: string; part: SciencePart }
   | { action: "update"; id: string; title?: string; completed?: boolean }
   | { action: "delete"; id: string };
 
@@ -48,6 +49,11 @@ const subjects: Array<{ id: Subject; name: string; note: string; grades: Array<1
   { id: "physics", name: "الفيزياء", note: "الحركة والطاقة", grades: [10, 11, 12] },
   { id: "integrated", name: "العلوم المتكاملة", note: "روابط العلوم", grades: [10] },
 ];
+
+const scienceParts = [
+  { id: "physics", title: "الجزء الأول", label: "فيزياء" },
+  { id: "chemistry", title: "الجزء الثاني", label: "كيمياء" },
+] as const;
 
 function SubjectIcon({ subject }: { subject: Subject }) {
   return subject === "chemistry" ? (
@@ -169,7 +175,7 @@ function Workspace() {
   }, []);
 
   const selected = useMemo(
-    () => lessons.filter((lesson) => lesson.subject === subject && lesson.grade === grade),
+    () => lessons.filter((lesson) => lesson.subject === subject && lesson.grade === grade).sort((a, b) => a.position - b.position),
     [lessons, subject, grade],
   );
   const visible = useMemo(
@@ -192,6 +198,9 @@ function Workspace() {
   const appearanceStyle = {
     "--forest": activeAppearance.primaryColor,
     "--subject": workspaceView === "students" ? activeAppearance.primaryColor : subjectColors[subject],
+    "--chemistry": activeAppearance.chemistryColor,
+    "--physics": activeAppearance.physicsColor,
+    "--integrated": activeAppearance.integratedColor,
     "--deep": `color-mix(in srgb, ${activeAppearance.primaryColor} 78%, black)`,
     "--mist": activeAppearance.backgroundColor,
     "--paper": `color-mix(in srgb, ${activeAppearance.backgroundColor} 35%, white)`,
@@ -250,9 +259,9 @@ function Workspace() {
     }
   }
 
-  async function addLesson(title: string) {
-    const result = await mutate({ action: "create", subject, grade, title });
-    if (result && result !== true) setLessons((current) => [...current, result]);
+  async function addLesson(title: string, part: SciencePart) {
+    const result = await mutate({ action: "create", subject, grade, title, part: subject === "integrated" ? part : "" });
+    if (result && result !== true) await loadWorkspace({ quiet: true });
     return Boolean(result);
   }
 
@@ -310,7 +319,7 @@ function Workspace() {
           <div className="banner-copy">
             <span className="eyebrow">{workspaceView === "lessons" ? "مساحة خاصة ومزامنة تلقائية" : "سجل الاستلام والمذكرات"}</span>
             <h2>{workspaceView === "lessons" ? "مخطط الدروس" : "متابعة الطلاب"}</h2>
-            <p>{workspaceView === "lessons" ? "اختر المادة والصف، ثم أضف الدروس وحدّث إنجازها بلمسة واحدة." : "أضف الطلاب وسجّل استلام أوراق الدرس أو المذكرة بصورة فردية أو جماعية."}</p>
+            <p>{workspaceView === "lessons" ? "اختر المادة والصف، ثم أضف الدروس وحدّث إنجازها بلمسة واحدة." : "أضف الطلاب وسجّل استلام المذكرة بصورة فردية أو جماعية."}</p>
           </div>
           {workspaceView === "lessons" ? (
             <div className="progress-wrap" aria-label={`اكتمل ${percent}%`}>
@@ -411,7 +420,7 @@ function Workspace() {
               ))}
             </div>
           </div>
-          <AddLesson onAdd={addLesson} />
+          <AddLesson subject={subject} onAdd={addLesson} />
           <div className="lesson-tools">
             <label className="search-box">
               <MagnifyingGlass />
@@ -447,20 +456,43 @@ function Workspace() {
             </p>
           )}
           <div className="lesson-list" aria-busy={sync === "syncing"}>
-            {visible.map((lesson, index) => (
-              <LessonRow
-                key={lesson.id}
-                lesson={lesson}
-                index={index}
-                onUpdate={updateLesson}
-                onDelete={deleteLesson}
-              />
-            ))}
+            {subject === "integrated"
+              ? scienceParts.map((part) => {
+                  const partLessons = visible.filter((lesson) => lesson.part === part.id);
+                  if (!partLessons.length) return null;
+                  return (
+                    <section className={"science-part-section " + part.id} key={part.id}>
+                      <header className="science-part-heading">
+                        <span>{part.title}</span>
+                        <b>{part.label}</b>
+                        <small>{partLessons.length} درس</small>
+                      </header>
+                      {partLessons.map((lesson) => (
+                        <LessonRow
+                          key={lesson.id}
+                          lesson={lesson}
+                          index={selected.findIndex((item) => item.id === lesson.id)}
+                          onUpdate={updateLesson}
+                          onDelete={deleteLesson}
+                        />
+                      ))}
+                    </section>
+                  );
+                })
+              : visible.map((lesson) => (
+                  <LessonRow
+                    key={lesson.id}
+                    lesson={lesson}
+                    index={selected.findIndex((item) => item.id === lesson.id)}
+                    onUpdate={updateLesson}
+                    onDelete={deleteLesson}
+                  />
+                ))}
             {!visible.length && <EmptyState hasLessons={selected.length > 0} />}
           </div>
         </div>
         </>) : (
-          <StudentTracker lessons={lessons} online={online} refreshKey={studentRefreshKey} chemistryColor={activeAppearance.chemistryColor} physicsColor={activeAppearance.physicsColor} onUnauthorized={() => setAuth("guest")} />
+          <StudentTracker lessons={lessons} online={online} refreshKey={studentRefreshKey} chemistryColor={activeAppearance.chemistryColor} physicsColor={activeAppearance.physicsColor} integratedColor={activeAppearance.integratedColor} onUnauthorized={() => setAuth("guest")} />
         )}
       </div>
 
@@ -747,8 +779,15 @@ function AuthPanel({
   );
 }
 
-function AddLesson({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) {
+function AddLesson({
+  subject,
+  onAdd,
+}: {
+  subject: Subject;
+  onAdd: (title: string, part: SciencePart) => Promise<boolean>;
+}) {
   const [title, setTitle] = useState("");
+  const [part, setPart] = useState<Exclude<SciencePart, "">>("physics");
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent) {
@@ -756,26 +795,43 @@ function AddLesson({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) {
     const clean = title.trim();
     if (!clean) return;
     setBusy(true);
-    if (await onAdd(clean)) setTitle("");
+    if (await onAdd(clean, subject === "integrated" ? part : "")) setTitle("");
     setBusy(false);
   }
 
   return (
-    <form className="add-lesson" onSubmit={(event) => void submit(event)}>
-      <span>
-        <Plus weight="bold" />
-      </span>
-      <label>
-        <span className="sr-only">اسم الدرس</span>
-        <input
-          maxLength={140}
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="اكتب اسم درس جديد"
-        />
-      </label>
-      <button disabled={busy || !title.trim()}>{busy ? "يُضاف..." : "إضافة الدرس"}</button>
-    </form>
+    <div className={"add-lesson-wrap" + (subject === "integrated" ? " integrated" : "")}>
+      {subject === "integrated" && (
+        <div className="science-part-tabs" role="group" aria-label="اختر جزء العلوم المتكاملة">
+          {scienceParts.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              className={part === item.id ? "active " + item.id : ""}
+              onClick={() => setPart(item.id)}
+            >
+              <span>{item.title}</span>
+              <b>{item.label}</b>
+            </button>
+          ))}
+        </div>
+      )}
+      <form className="add-lesson" onSubmit={(event) => void submit(event)}>
+        <span>
+          <Plus weight="bold" />
+        </span>
+        <label>
+          <span className="sr-only">اسم الدرس</span>
+          <input
+            maxLength={140}
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder={subject === "integrated" ? "أضف درسًا إلى جزء " + (part === "physics" ? "الفيزياء" : "الكيمياء") : "اكتب اسم درس جديد"}
+          />
+        </label>
+        <button disabled={busy || !title.trim()}>{busy ? "يُضاف..." : "إضافة الدرس"}</button>
+      </form>
+    </div>
   );
 }
 

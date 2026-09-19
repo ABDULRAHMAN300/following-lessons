@@ -187,3 +187,32 @@
 .memo-only-note>svg{width:32px;height:32px;padding:.42rem;border-radius:10px;background:var(--forest);color:#fff;flex:none}
 .memo-only-note>span{display:grid;gap:.15rem}.memo-only-note b{font-size:.92rem}.memo-only-note small{font-size:.76rem;font-weight:600;line-height:1.55;opacity:.7}
 .date-error{display:block;color:#a3383f;font-size:.74rem;font-weight:700}.student-form input[dir="ltr"],.batch-settings input[dir="ltr"]{text-align:center;letter-spacing:.02em}
+
+/* Integrated science parts */
+.add-lesson-wrap.integrated{margin-top:30px}
+.add-lesson-wrap.integrated .add-lesson{margin-top:0}
+.science-part-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.science-part-tabs button{min-height:58px;padding:9px 14px;border:1px solid var(--line);background:var(--paper);color:var(--deep);font:inherit;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:border-color .2s,background .2s,transform .2s}
+.science-part-tabs button:hover{transform:translateY(-1px)}
+.science-part-tabs button span{font-size:12px;color:var(--muted)}
+.science-part-tabs button b{font-size:15px}
+.science-part-tabs button.active.physics{border-color:var(--physics);color:var(--physics);background:color-mix(in srgb,var(--physics) 9%,var(--paper))}
+.science-part-tabs button.active.chemistry{border-color:var(--chemistry);color:var(--chemistry);background:color-mix(in srgb,var(--chemistry) 9%,var(--paper))}
+.science-part-section{--part-color:var(--subject);margin-top:22px}
+.science-part-section.physics{--part-color:var(--physics)}
+.science-part-section.chemistry{--part-color:var(--chemistry)}
+.science-part-heading{min-height:64px;padding:12px 18px;border-inline-start:5px solid var(--part-color);background:color-mix(in srgb,var(--part-color) 9%,var(--paper));display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;color:var(--deep)}
+.science-part-heading span{font-size:12px;color:var(--muted)}
+.science-part-heading b{font-size:18px;color:var(--part-color)}
+.science-part-heading small{padding:5px 9px;border-radius:999px;background:color-mix(in srgb,var(--part-color) 13%,var(--paper));font-size:11px;color:var(--part-color)}
+.student-progress-grid.three-courses .student-course-progress.integrated,.course-choice.three-courses button.integrated{grid-column:1/-1}
+.student-course-progress.integrated{--course:var(--integrated)}
+.course-dot.integrated{background:var(--integrated)}
+.course-choice button.active.integrated{border-color:var(--integrated);color:var(--integrated);background:color-mix(in srgb,var(--integrated) 9%,white)}
+@media(max-width:620px){
+  .add-lesson-wrap.integrated{margin-top:22px}
+  .science-part-tabs{grid-template-columns:1fr}
+  .science-part-tabs button{min-height:52px}
+  .science-part-heading{grid-template-columns:1fr auto}
+  .science-part-heading span{grid-column:1/-1}
+}

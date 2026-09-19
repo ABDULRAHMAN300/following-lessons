@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import {
-  CalendarDots, Check, ClipboardText, Flask, MagnifyingGlass, PencilSimple,
+  CalendarDots, Check, ClipboardText, Flask, Leaf, MagnifyingGlass, PencilSimple,
   Plus, Trash, UserPlus, UsersThree, X
 } from "@phosphor-icons/react";
 import type { Lesson } from "@/lib/lesson.functions";
@@ -10,7 +10,7 @@ import {
 } from "@/lib/student.functions";
 
 type Grade=10|11|12;
-type Course="chemistry"|"physics";
+type Course="chemistry"|"physics"|"integrated";
 type StudentDraft={name:string;grade:Grade;groupName:string;note:string};
 type ReceiptDraft={studentIds:string[];lessonId:string;receivedAt:string;note:string;mode:"replace"|"merge"};
 const emptyStudent:StudentDraft={name:"",grade:10,groupName:"",note:""};
@@ -31,10 +31,11 @@ const parseDate=(value:string)=>{
   if(parsed.getUTCFullYear()!==year||parsed.getUTCMonth()!==month-1||parsed.getUTCDate()!==day)return null;
   return `${year}-${pad(month)}-${pad(day)}`;
 };
-const courseName:Record<Course,string>={chemistry:"الكيمياء",physics:"الفيزياء"};
+const courseName:Record<Course,string>={chemistry:"الكيمياء",physics:"الفيزياء",integrated:"العلوم المتكاملة"};
+const lessonName=(lesson:Lesson)=>lesson.subject==="integrated"?(lesson.part==="physics"?"فيزياء · ":"كيمياء · ")+lesson.title:lesson.title;
 
-export function StudentTracker({lessons,online,refreshKey,chemistryColor,physicsColor,onUnauthorized}:{
-  lessons:Lesson[];online:boolean;refreshKey:number;chemistryColor:string;physicsColor:string;onUnauthorized:()=>void;
+export function StudentTracker({lessons,online,refreshKey,chemistryColor,physicsColor,integratedColor,onUnauthorized}:{
+  lessons:Lesson[];online:boolean;refreshKey:number;chemistryColor:string;physicsColor:string;integratedColor:string;onUnauthorized:()=>void;
 }){
   const [students,setStudents]=useState<StudentRecord[]>([]);
   const [receipts,setReceipts]=useState<StudentReceipt[]>([]);
@@ -112,7 +113,7 @@ export function StudentTracker({lessons,online,refreshKey,chemistryColor,physics
   const visible=useMemo(()=>students.filter(s=>(grade==="all"||s.grade===grade)&&(`${s.name} ${s.groupName}`).toLocaleLowerCase("ar").includes(query.trim().toLocaleLowerCase("ar"))),[students,grade,query]);
   const todayCount=receipts.filter(r=>r.receivedAt===today()).length;
   const tracked=new Set(receipts.map(r=>r.studentId)).size;
-  const theme={"--chemistry":chemistryColor,"--physics":physicsColor} as CSSProperties;
+  const theme={"--chemistry":chemistryColor,"--physics":physicsColor,"--integrated":integratedColor} as CSSProperties;
 
   return <section className="student-workspace" style={theme}>
     <div className="student-heading">
@@ -150,7 +151,7 @@ function StudentCard({student,receipts,lessons,onEdit,onReceipt,onDelete,onDelet
     const done=new Set(receipts.filter(r=>r.subject===course).map(r=>r.lessonId)).size;
     return {done,total,pct:total?Math.round(done/total*100):0};
   };
-  const chem=progress("chemistry"),phys=progress("physics");
+  const chem=progress("chemistry"),phys=progress("physics"),integrated=progress("integrated");
   return <article className="student-card">
     <div className="student-card-head">
       <span className="student-avatar">{student.name.trim().charAt(0)||"ط"}</span>
@@ -158,9 +159,10 @@ function StudentCard({student,receipts,lessons,onEdit,onReceipt,onDelete,onDelet
       <button className="icon-action" aria-label="تعديل الطالب" onClick={onEdit}><PencilSimple/></button>
     </div>
     {student.note&&<p className="student-note">{student.note}</p>}
-    <div className="student-progress-grid">
+    <div className={"student-progress-grid" + (student.grade===10?" three-courses":"")}>
       <CourseProgress course="chemistry" value={chem}/>
       <CourseProgress course="physics" value={phys}/>
+      {student.grade===10&&<CourseProgress course="integrated" value={integrated}/>}
     </div>
     <div className="student-card-actions">
       <button className="receipt-action" onClick={onReceipt}><Plus weight="bold"/> تسجيل استلام</button>
@@ -193,7 +195,7 @@ function StudentModal({student,busy,onClose,onSave}:{student?:StudentRecord;busy
 }
 
 function ReceiptModal({student,lessons,existing,busy,onClose,onSave}:{student:StudentRecord;lessons:Lesson[];existing:StudentReceipt[];busy:boolean;onClose:()=>void;onSave:(v:ReceiptDraft)=>Promise<boolean>}){
-  const available=lessons.filter(l=>l.grade===student.grade&&(l.subject==="chemistry"||l.subject==="physics"));
+  const available=lessons.filter(l=>l.grade===student.grade&&(l.subject==="chemistry"||l.subject==="physics"||l.subject==="integrated"));
   const [course,setCourse]=useState<Course>("chemistry");
   const courseLessons=available.filter(l=>l.subject===course);
   const [lessonId,setLessonId]=useState(courseLessons[0]?.id??"");
@@ -209,8 +211,8 @@ function ReceiptModal({student,lessons,existing,busy,onClose,onSave}:{student:St
   }
   return <Modal title={`تسجيل استلام — ${student.name}`} onClose={onClose}>
     <form className="student-form" onSubmit={submit}>
-      <CourseChoices value={course} onChange={setCourse}/>
-      <label>الدرس<select required value={lessonId} onChange={e=>setLessonId(e.target.value)}><option value="">اختر الدرس</option>{courseLessons.map(l=><option key={l.id} value={l.id}>{l.title}</option>)}</select></label>
+      <CourseChoices value={course} onChange={setCourse} showIntegrated={student.grade===10}/>
+      <label>الدرس<select required value={lessonId} onChange={e=>setLessonId(e.target.value)}><option value="">اختر الدرس</option>{courseLessons.map(l=><option key={l.id} value={l.id}>{lessonName(l)}</option>)}</select></label>
       <div className="memo-only-note"><Check weight="bold"/><span><b>المذكرة</b><small>سيُسجّل هذا الدرس وكل الدروس السابقة له تلقائيًا.</small></span></div>
       <div className="form-row"><label>تاريخ الاستلام<input dir="ltr" inputMode="numeric" required value={dateText} onChange={e=>{setDateText(e.target.value);setDateError("")}} placeholder="19/9/2026"/>{dateError&&<small className="date-error" role="alert">{dateError}</small>}</label><label>ملاحظة (اختياري)<input maxLength={300} value={note} onChange={e=>setNote(e.target.value)}/></label></div>
       {current&&<p className="editing-note">يوجد سجل لهذا الدرس؛ الحفظ سيحدّثه ويثبّت الدروس السابقة.</p>}
@@ -224,6 +226,7 @@ function BatchPanel({students,lessons,busy,onSave}:{students:StudentRecord[];les
   const [chosen,setChosen]=useState<string[]>([]);
   const eligible=students.filter(s=>s.grade===grade);
   const courseLessons=lessons.filter(l=>l.grade===grade&&l.subject===course);
+  useEffect(()=>{if(grade!==10&&course==="integrated")setCourse("chemistry")},[grade,course]);
   useEffect(()=>{setLessonId(courseLessons[0]?.id??"");setChosen([])},[grade,course]);
   const toggle=(id:string)=>setChosen(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);
   async function submit(e:FormEvent){
@@ -238,8 +241,8 @@ function BatchPanel({students,lessons,busy,onSave}:{students:StudentRecord[];les
     <div className="batch-heading"><div><span className="eyebrow">إجراء سريع</span><h4>تسجيل استلام لعدة طلاب</h4><p>اختر الصف والدرس ثم حدد الطلاب الذين استلموا المذكرة.</p></div><span className="batch-count">{chosen.length} محدد</span></div>
     <div className="batch-settings">
       <label>الصف<select value={grade} onChange={e=>setGrade(Number(e.target.value) as Grade)}><option value={10}>الصف 10</option><option value={11}>الصف 11</option><option value={12}>الصف 12</option></select></label>
-      <div className="batch-course"><span>المادة</span><CourseChoices value={course} onChange={setCourse}/></div>
-      <label className="wide-field">الدرس<select value={lessonId} onChange={e=>setLessonId(e.target.value)}><option value="">اختر الدرس</option>{courseLessons.map(l=><option value={l.id} key={l.id}>{l.title}</option>)}</select></label>
+      <div className="batch-course"><span>المادة</span><CourseChoices value={course} onChange={setCourse} showIntegrated={grade===10}/></div>
+      <label className="wide-field">الدرس<select value={lessonId} onChange={e=>setLessonId(e.target.value)}><option value="">اختر الدرس</option>{courseLessons.map(l=><option value={l.id} key={l.id}>{lessonName(l)}</option>)}</select></label>
       <div className="wide-field memo-only-note"><Check weight="bold"/><span><b>المذكرة</b><small>سيُسجّل الدرس المختار وكل الدروس السابقة له لكل طالب محدد.</small></span></div>
       <label>التاريخ<input dir="ltr" inputMode="numeric" value={dateText} onChange={e=>{setDateText(e.target.value);setDateError("")}} placeholder="19/9/2026"/>{dateError&&<small className="date-error" role="alert">{dateError}</small>}</label>
       <label>ملاحظة (اختياري)<input maxLength={300} value={note} onChange={e=>setNote(e.target.value)}/></label>
@@ -251,7 +254,7 @@ function BatchPanel({students,lessons,busy,onSave}:{students:StudentRecord[];les
     <button className="batch-submit" disabled={busy||!chosen.length||!lessonId}><Check weight="bold"/> حفظ الاستلام لـ {chosen.length} طالب</button>
   </form>
 }
-function CourseChoices({value,onChange}:{value:Course;onChange:(v:Course)=>void}){return <div className="course-choice"><button type="button" className={value==="chemistry"?"active chemistry":""} onClick={()=>onChange("chemistry")}><Flask/> الكيمياء</button><button type="button" className={value==="physics"?"active physics":""} onClick={()=>onChange("physics")}><span className="physics-mark">φ</span> الفيزياء</button></div>}
+function CourseChoices({value,onChange,showIntegrated}:{value:Course;onChange:(v:Course)=>void;showIntegrated:boolean}){return <div className={"course-choice" + (showIntegrated?" three-courses":"")}><button type="button" className={value==="chemistry"?"active chemistry":""} onClick={()=>onChange("chemistry")}><Flask/> الكيمياء</button><button type="button" className={value==="physics"?"active physics":""} onClick={()=>onChange("physics")}><span className="physics-mark">φ</span> الفيزياء</button>{showIntegrated&&<button type="button" className={value==="integrated"?"active integrated":""} onClick={()=>onChange("integrated")}><Leaf/> العلوم المتكاملة</button>}</div>}
 function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:ReactNode}){return <div className="student-modal-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><section className="student-modal" role="dialog" aria-modal="true" aria-label={title}><header><h3>{title}</h3><button aria-label="إغلاق" onClick={onClose}><X/></button></header>{children}</section></div>}
 function ModalActions({busy,onClose,label}:{busy:boolean;onClose:()=>void;label:string}){return <div className="modal-actions"><button type="button" onClick={onClose}>إلغاء</button><button className="save-action" disabled={busy}>{busy?"جار الحفظ…":label}</button></div>}
 function EmptyStudents({onAdd}:{onAdd:()=>void}){return <div className="student-empty-state"><UsersThree weight="duotone"/><h4>ابدأ بإضافة أول طالب</h4><p>بعد ذلك ستتمكن من تسجيل استلام المذكرة له.</p><button onClick={onAdd}><Plus/> إضافة طالب</button></div>}

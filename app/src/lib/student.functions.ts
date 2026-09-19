@@ -21,10 +21,10 @@ const receiptSave=z.object({
 const receiptMutation=z.union([receiptSave,z.object({action:z.literal("delete"),id:z.string().uuid()})]);
 
 export type StudentRecord={id:string;name:string;grade:10|11|12;groupName:string;note:string;createdAt:string;updatedAt:string};
-export type StudentReceipt={id:string;studentId:string;lessonId:string;lessonTitle:string;subject:"chemistry"|"physics";grade:10|11|12;worksheet:boolean;memo:boolean;receivedAt:string;note:string;createdAt:string;updatedAt:string};
+export type StudentReceipt={id:string;studentId:string;lessonId:string;lessonTitle:string;subject:"chemistry"|"physics"|"integrated";grade:10|11|12;worksheet:boolean;memo:boolean;receivedAt:string;note:string;createdAt:string;updatedAt:string};
 type StudentRow={id:string;name:string;grade:10|11|12;group_name:string;note:string;created_at:string;updated_at:string};
-type ReceiptRow={id:string;student_id:string;lesson_id:string;lesson_title:string;subject:"chemistry"|"physics";grade:10|11|12;worksheet_received:number;memo_received:number;received_at:string;note:string;created_at:string;updated_at:string};
-type LessonTarget={id:string;subject:"chemistry"|"physics";grade:10|11|12;position:number};
+type ReceiptRow={id:string;student_id:string;lesson_id:string;lesson_title:string;subject:"chemistry"|"physics"|"integrated";grade:10|11|12;worksheet_received:number;memo_received:number;received_at:string;note:string;created_at:string;updated_at:string};
+type LessonTarget={id:string;subject:"chemistry"|"physics"|"integrated";grade:10|11|12;position:number};
 const studentOut=(r:StudentRow):StudentRecord=>({id:r.id,name:r.name,grade:r.grade,groupName:r.group_name,note:r.note,createdAt:r.created_at,updatedAt:r.updated_at});
 const receiptOut=(r:ReceiptRow):StudentReceipt=>({id:r.id,studentId:r.student_id,lessonId:r.lesson_id,lessonTitle:r.lesson_title,subject:r.subject,grade:r.grade,worksheet:Boolean(r.worksheet_received),memo:Boolean(r.memo_received),receivedAt:r.received_at,note:r.note,createdAt:r.created_at,updatedAt:r.updated_at});
 
@@ -65,7 +65,7 @@ export const mutateReceipt=createServerFn({method:"POST"}).validator(receiptMuta
     await database().prepare("DELETE FROM student_receipts WHERE id=? AND owner_id=?").bind(data.id,user.id).run();
     return {ok:true as const};
   }
-  const lesson=await database().prepare("SELECT id,subject,grade,position FROM lessons WHERE id=? AND owner_id=? AND subject IN ('chemistry','physics')").bind(data.lessonId,user.id).first<LessonTarget>();
+  const lesson=await database().prepare("SELECT id,subject,grade,position FROM lessons WHERE id=? AND owner_id=? AND subject IN ('chemistry','physics','integrated')").bind(data.lessonId,user.id).first<LessonTarget>();
   if(!lesson)return {ok:false as const,error:"الدرس غير موجود"};
   const earlier=await database().prepare("SELECT id FROM lessons WHERE owner_id=? AND subject=? AND grade=? AND position<=? ORDER BY position,created_at").bind(user.id,lesson.subject,lesson.grade,lesson.position).all<{id:string}>();
   const lessonIds=(earlier.results??[]).map(row=>row.id);

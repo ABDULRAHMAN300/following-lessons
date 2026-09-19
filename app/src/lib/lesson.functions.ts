@@ -26,11 +26,13 @@ const authSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("logout") }),
 ]);
 const subject = z.enum(["chemistry", "physics", "integrated"]);
+const lessonPart = z.enum(["", "physics", "chemistry"]);
 const lessonCreate = z.object({
   action: z.literal("create"),
   subject,
   grade: z.union([z.literal(10), z.literal(11), z.literal(12)]),
   title: z.string().trim().min(1).max(140),
+  part: lessonPart.default(""),
 });
 const lessonUpdate = z
   .object({
@@ -64,6 +66,7 @@ const appearanceMutation = z.object({
 export type Lesson = {
   id: string;
   subject: "chemistry" | "physics" | "integrated";
+  part: "" | "physics" | "chemistry";
   grade: 10 | 11 | 12;
   title: string;
   completed: boolean;
@@ -140,7 +143,7 @@ export const listLessons = createServerFn({ method: "GET" }).handler(async () =>
   if (!user) return { ok: false as const, code: "unauthorized" as const, lessons: [] as Lesson[] };
   const result = await database()
     .prepare(
-      "SELECT id,subject,grade,title,completed,position,created_at,updated_at FROM lessons WHERE owner_id=? ORDER BY subject,grade,position,created_at",
+      "SELECT id,subject,part,grade,title,completed,position,created_at,updated_at FROM lessons WHERE owner_id=? ORDER BY subject,grade,position,created_at",
     )
     .bind(user.id)
     .all<Row>();
@@ -192,26 +195,66 @@ export const mutateLesson = createServerFn({ method: "POST" })
       return { ok: false as const, code: "unauthorized" as const, error: "يلزم تسجيل الدخول" };
     if (data.action === "create") {
       if (!validScope(data)) return { ok: false as const, error: "بيانات الدرس غير صالحة" };
-      const next = await database()
-        .prepare(
-          "SELECT COALESCE(MAX(position),-1)+1 AS value FROM lessons WHERE owner_id=? AND subject=? AND grade=?",
-        )
-        .bind(user.id, data.subject, data.grade)
-        .first<{ value: number }>();
-      const id = crypto.randomUUID(),
-        now = new Date().toISOString(),
+      const part = data.subject === "integrated" ? data.part : "";
+      if (data.subject === "integrated" && !part)
+        return { ok: false as const, error: "اختر جزء العلوم المتكاملة" };
+
+      let position: number;
+      let shift = false;
+      if (data.subject === "integrated" && part === "physics") {
+        const firstChemistry = await database()
+          .prepare(
+            "SELECT MIN(position) AS value FROM lessons WHERE owner_id=? AND subject='integrated' AND grade=? AND part='chemistry'",
+          )
+          .bind(user.id, data.grade)
+          .first<{ value: number | null }>();
+        if (firstChemistry?.value != null) {
+          position = Number(firstChemistry.value);
+          shift = true;
+        } else {
+          const next = await database()
+            .prepare(
+              "SELECT COALESCE(MAX(position),-1)+1 AS value FROM lessons WHERE owner_id=? AND subject=? AND grade=?",
+            )
+            .bind(user.id, data.subject, data.grade)
+            .first<{ value: number }>();
+          position = Number(next?.value ?? 0);
+        }
+      } else {
+        const next = await database()
+          .prepare(
+            "SELECT COALESCE(MAX(position),-1)+1 AS value FROM lessons WHERE owner_id=? AND subject=? AND grade=?",
+          )
+          .bind(user.id, data.subject, data.grade)
+          .first<{ value: number }>();
         position = Number(next?.value ?? 0);
-      await database()
+      }
+
+      const id = crypto.randomUUID(),
+        now = new Date().toISOString();
+      const insert = database()
         .prepare(
-          "INSERT INTO lessons(id,owner_id,subject,grade,title,completed,position,created_at,updated_at) VALUES(?,?,?,?,?,0,?,?,?)",
+          "INSERT INTO lessons(id,owner_id,subject,part,grade,title,completed,position,created_at,updated_at) VALUES(?,?,?,?,?,?,0,?,?,?)",
         )
-        .bind(id, user.id, data.subject, data.grade, data.title, position, now, now)
-        .run();
+        .bind(id, user.id, data.subject, part, data.grade, data.title, position, now, now);
+      if (shift) {
+        await database().batch([
+          database()
+            .prepare(
+              "UPDATE lessons SET position=position+1 WHERE owner_id=? AND subject='integrated' AND grade=? AND position>=?",
+            )
+            .bind(user.id, data.grade, position),
+          insert,
+        ]);
+      } else {
+        await insert.run();
+      }
       return {
         ok: true as const,
         lesson: present({
           id,
           subject: data.subject,
+          part,
           grade: data.grade,
           title: data.title,
           completed: 0,
@@ -232,7 +275,7 @@ export const mutateLesson = createServerFn({ method: "POST" })
     if (!parsed.success) return { ok: false as const, error: "تعذر تحديث الدرس" };
     const current = await database()
       .prepare(
-        "SELECT id,subject,grade,title,completed,position,created_at,updated_at FROM lessons WHERE id=? AND owner_id=?",
+        "SELECT id,subject,part,grade,title,completed,position,created_at,updated_at FROM lessons WHERE id=? AND owner_id=?",
       )
       .bind(data.id, user.id)
       .first<Row>();
