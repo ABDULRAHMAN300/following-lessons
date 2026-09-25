@@ -34,24 +34,20 @@ const lessonCreate = z.object({
   title: z.string().trim().min(1).max(140),
   part: lessonPart.default(""),
 });
+const lessonUpdateShape = {
+  action: z.literal("update") as z.ZodLiteral<"update">,
+  id: z.string().uuid(),
+  title: z.string().trim().min(1).max(140).optional(),
+  completed: z.boolean().optional(),
+};
 const lessonUpdate = z
-  .object({
-    action: z.literal("update"),
-    id: z.string().uuid(),
-    title: z.string().trim().min(1).max(140).optional(),
-    completed: z.boolean().optional(),
-  })
+  .object(lessonUpdateShape)
   .refine((v) => v.title !== undefined || v.completed !== undefined);
 const lessonDelete = z.object({ action: z.literal("delete"), id: z.string().uuid() });
 const lessonMutation = z.discriminatedUnion("action", [
   lessonCreate,
   lessonDelete,
-  z.object({
-    action: z.literal("update"),
-    id: z.string().uuid(),
-    title: z.string().trim().min(1).max(140).optional(),
-    completed: z.boolean().optional(),
-  }),
+  z.object(lessonUpdateShape),
 ]);
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 const appearanceMutation = z.object({

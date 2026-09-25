@@ -21,19 +21,19 @@ const receiptSave=z.object({
 const receiptMutation=z.union([receiptSave,z.object({action:z.literal("delete"),id:z.string().uuid()})]);
 
 export type StudentRecord={id:string;name:string;grade:10|11|12;groupName:string;note:string;createdAt:string;updatedAt:string};
-export type StudentReceipt={id:string;studentId:string;lessonId:string;lessonTitle:string;subject:"chemistry"|"physics"|"integrated";grade:10|11|12;worksheet:boolean;memo:boolean;receivedAt:string;note:string;createdAt:string;updatedAt:string};
+export type StudentReceipt={id:string;studentId:string;lessonId:string;lessonTitle:string;subject:"chemistry"|"physics"|"integrated";grade:10|11|12;memo:boolean;receivedAt:string;note:string;createdAt:string;updatedAt:string};
 type StudentRow={id:string;name:string;grade:10|11|12;group_name:string;note:string;created_at:string;updated_at:string};
-type ReceiptRow={id:string;student_id:string;lesson_id:string;lesson_title:string;subject:"chemistry"|"physics"|"integrated";grade:10|11|12;worksheet_received:number;memo_received:number;received_at:string;note:string;created_at:string;updated_at:string};
+type ReceiptRow={id:string;student_id:string;lesson_id:string;lesson_title:string;subject:"chemistry"|"physics"|"integrated";grade:10|11|12;memo_received:number;received_at:string;note:string;created_at:string;updated_at:string};
 type LessonTarget={id:string;subject:"chemistry"|"physics"|"integrated";grade:10|11|12;position:number};
 const studentOut=(r:StudentRow):StudentRecord=>({id:r.id,name:r.name,grade:r.grade,groupName:r.group_name,note:r.note,createdAt:r.created_at,updatedAt:r.updated_at});
-const receiptOut=(r:ReceiptRow):StudentReceipt=>({id:r.id,studentId:r.student_id,lessonId:r.lesson_id,lessonTitle:r.lesson_title,subject:r.subject,grade:r.grade,worksheet:Boolean(r.worksheet_received),memo:Boolean(r.memo_received),receivedAt:r.received_at,note:r.note,createdAt:r.created_at,updatedAt:r.updated_at});
+const receiptOut=(r:ReceiptRow):StudentReceipt=>({id:r.id,studentId:r.student_id,lessonId:r.lesson_id,lessonTitle:r.lesson_title,subject:r.subject,grade:r.grade,memo:Boolean(r.memo_received),receivedAt:r.received_at,note:r.note,createdAt:r.created_at,updatedAt:r.updated_at});
 
 export const listStudentTracking=createServerFn({method:"GET"}).handler(async()=>{
   const user=await getSessionUser(getRequest());
   if(!user)return {ok:false as const,code:"unauthorized" as const,students:[] as StudentRecord[],receipts:[] as StudentReceipt[]};
   const [students,receipts]=await Promise.all([
     database().prepare("SELECT id,name,grade,group_name,note,created_at,updated_at FROM students WHERE owner_id=? ORDER BY grade,name").bind(user.id).all<StudentRow>(),
-    database().prepare("SELECT r.id,r.student_id,r.lesson_id,l.title AS lesson_title,l.subject,l.grade,r.worksheet_received,r.memo_received,r.received_at,r.note,r.created_at,r.updated_at FROM student_receipts r JOIN lessons l ON l.id=r.lesson_id WHERE r.owner_id=? ORDER BY r.received_at DESC,r.created_at DESC").bind(user.id).all<ReceiptRow>()
+    database().prepare("SELECT r.id,r.student_id,r.lesson_id,l.title AS lesson_title,l.subject,l.grade,r.memo_received,r.received_at,r.note,r.created_at,r.updated_at FROM student_receipts r JOIN lessons l ON l.id=r.lesson_id WHERE r.owner_id=? ORDER BY r.received_at DESC,r.created_at DESC").bind(user.id).all<ReceiptRow>()
   ]);
   return {ok:true as const,students:(students.results??[]).map(studentOut),receipts:(receipts.results??[]).map(receiptOut)};
 });

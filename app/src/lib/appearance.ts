@@ -45,4 +45,22 @@ export const appearancePresets: Array<Appearance & { name: string }> = [
     physicsColor: "#416eaa",
     integratedColor: "#56815f",
   },
+  {
+    name: "رمل ذهبي",
+    primaryColor: "#6b4226",
+    accentColor: "#2f8f83",
+    backgroundColor: "#faf3ea",
+    chemistryColor: "#c1573a",
+    physicsColor: "#316b91",
+    integratedColor: "#5c8a4a",
+  },
+  {
+    name: "شفق وردي",
+    primaryColor: "#5c2a3a",
+    accentColor: "#f2a154",
+    backgroundColor: "#fbf0f2",
+    chemistryColor: "#c9536b",
+    physicsColor: "#4d6fa8",
+    integratedColor: "#4f8f6d",
+  },
 ];

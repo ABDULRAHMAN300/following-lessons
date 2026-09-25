@@ -78,7 +78,6 @@ export function StudentTracker({lessons,online,refreshKey,chemistryColor,physics
     finally{setBusy(false)}
   }
   async function deleteStudent(student:StudentRecord){
-    if(!confirm(`حذف «${student.name}» وسجل استلامه بالكامل؟`))return;
     if(!online){setError("يلزم الاتصال بالإنترنت للحذف.");return}
     setBusy(true);
     try{
@@ -100,7 +99,6 @@ export function StudentTracker({lessons,online,refreshKey,chemistryColor,physics
     finally{setBusy(false)}
   }
   async function deleteReceipt(receipt:StudentReceipt){
-    if(!confirm("حذف سجل الاستلام هذا؟"))return;
     setBusy(true);
     try{
       const data=await mutateReceipt({data:{action:"delete",id:receipt.id}});
@@ -111,7 +109,7 @@ export function StudentTracker({lessons,online,refreshKey,chemistryColor,physics
   }
 
   const visible=useMemo(()=>students.filter(s=>(grade==="all"||s.grade===grade)&&(`${s.name} ${s.groupName}`).toLocaleLowerCase("ar").includes(query.trim().toLocaleLowerCase("ar"))),[students,grade,query]);
-  const todayCount=receipts.filter(r=>r.receivedAt===today()).length;
+  const todayCount=new Set(receipts.filter(r=>r.receivedAt===today()).map(r=>r.studentId)).size;
   const tracked=new Set(receipts.map(r=>r.studentId)).size;
   const theme={"--chemistry":chemistryColor,"--physics":physicsColor,"--integrated":integratedColor} as CSSProperties;
 
@@ -146,6 +144,7 @@ function StudentCard({student,receipts,lessons,onEdit,onReceipt,onDelete,onDelet
   student:StudentRecord;receipts:StudentReceipt[];lessons:Lesson[];onEdit:()=>void;onReceipt:()=>void;onDelete:()=>void;onDeleteReceipt:(r:StudentReceipt)=>void;busy:boolean
 }){
   const [open,setOpen]=useState(false);
+  const [confirmDelete,setConfirmDelete]=useState(false);
   const progress=(course:Course)=>{
     const total=lessons.filter(l=>l.grade===student.grade&&l.subject===course).length;
     const done=new Set(receipts.filter(r=>r.subject===course).map(r=>r.lessonId)).size;
@@ -169,14 +168,32 @@ function StudentCard({student,receipts,lessons,onEdit,onReceipt,onDelete,onDelet
       <button onClick={()=>setOpen(v=>!v)}>{open?"إخفاء السجل":`السجل (${receipts.length})`}</button>
     </div>
     {open&&<div className="receipt-history">
-      {receipts.length?receipts.map(r=><div className="receipt-record" key={r.id}>
-        <span className={`course-dot ${r.subject}`}/>
-        <div><b>{r.lessonTitle}</b><small>{courseName[r.subject]} · {formatDate(r.receivedAt)}</small><p>المذكرة{r.note?` — ${r.note}`:""}</p></div>
-        <button disabled={busy} aria-label="حذف السجل" onClick={()=>onDeleteReceipt(r)}><Trash/></button>
-      </div>):<p className="history-empty">لا يوجد استلام مسجل بعد.</p>}
+      {receipts.length?receipts.map(r=><ReceiptRecordRow key={r.id} receipt={r} busy={busy} onDelete={onDeleteReceipt}/>):<p className="history-empty">لا يوجد استلام مسجل بعد.</p>}
     </div>}
-    <button className="student-delete" disabled={busy} onClick={onDelete}><Trash/> حذف الطالب</button>
+    {confirmDelete?(
+      <span className="delete-confirm student-delete-confirm">
+        <button type="button" disabled={busy} onClick={()=>{setConfirmDelete(false);onDelete()}}><Trash weight="bold"/> تأكيد الحذف</button>
+        <button type="button" disabled={busy} onClick={()=>setConfirmDelete(false)}>إلغاء</button>
+      </span>
+    ):(
+      <button className="student-delete" type="button" disabled={busy} onClick={()=>setConfirmDelete(true)}><Trash/> حذف الطالب</button>
+    )}
   </article>
+}
+function ReceiptRecordRow({receipt,busy,onDelete}:{receipt:StudentReceipt;busy:boolean;onDelete:(r:StudentReceipt)=>void}){
+  const [confirming,setConfirming]=useState(false);
+  return <div className="receipt-record">
+    <span className={`course-dot ${receipt.subject}`}/>
+    <div><b>{receipt.lessonTitle}</b><small>{courseName[receipt.subject]} · {formatDate(receipt.receivedAt)}</small><p>المذكرة{receipt.note?` — ${receipt.note}`:""}</p></div>
+    {confirming?(
+      <span className="delete-confirm receipt-delete-confirm">
+        <button type="button" disabled={busy} onClick={()=>{setConfirming(false);onDelete(receipt)}}>حذف</button>
+        <button type="button" disabled={busy} onClick={()=>setConfirming(false)}>إلغاء</button>
+      </span>
+    ):(
+      <button type="button" disabled={busy} aria-label="حذف السجل" onClick={()=>setConfirming(true)}><Trash/></button>
+    )}
+  </div>
 }
 function CourseProgress({course,value}:{course:Course;value:{done:number;total:number;pct:number}}){
   return <div className={`student-course-progress ${course}`}><span><b>{courseName[course]}</b><small>{value.done} / {value.total}</small></span><div><i style={{width:`${value.pct}%`}}/></div></div>
