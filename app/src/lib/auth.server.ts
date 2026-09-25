@@ -1,7 +1,7 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { setCookie } from "@tanstack/react-start/server";
 import { bindings } from "@/lib/bindings.server";
-const COOKIE="fl_session",EMBED_COOKIE="fl_session_embed",SESSION_DAYS=30,PBKDF2_ITERATIONS=310000,enc=new TextEncoder();
+const COOKIE="fl_session",EMBED_COOKIE="fl_session_embed",SESSION_DAYS=30,PBKDF2_ITERATIONS=100000,enc=new TextEncoder();
 export type SessionUser={id:string;email:string};
 export function database():D1Database{const db=bindings().DB;if(!db)throw new Error("Database binding is unavailable");return db}
 function bytesToBase64(bytes:Uint8Array){let binary="";for(const byte of bytes)binary+=String.fromCharCode(byte);return btoa(binary)}
