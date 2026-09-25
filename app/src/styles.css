@@ -222,3 +222,36 @@
   .science-part-heading{grid-template-columns:1fr auto}
   .science-part-heading span{grid-column:1/-1}
 }
+
+/* Lesson reordering */
+.lesson-reorder{display:flex;flex-direction:column;gap:1px}
+.lesson-reorder button{width:38px;height:18px;display:grid;place-content:center;border:0;background:transparent;color:var(--muted);cursor:pointer;padding:0}
+.lesson-reorder button svg{width:13px;height:13px}
+.lesson-reorder button:hover:not(:disabled){color:var(--forest);background:var(--mist)}
+.lesson-reorder button:disabled{opacity:.3;cursor:not-allowed}
+@media(max-width:620px){.lesson-reorder button{width:42px;height:20px}}
+
+/* Bulk lesson import */
+.bulk-add-toggle{display:flex;align-items:center;gap:.4rem;margin:-8px 0 18px;border:0;background:transparent;padding:6px 2px;color:var(--muted);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.bulk-add-toggle:hover{color:var(--forest)}
+.bulk-add-toggle svg{width:15px;height:15px}
+.bulk-add-form{margin:0 0 22px;padding:16px;border:1px solid var(--line);background:var(--white)}
+.bulk-add-form textarea{width:100%;min-height:120px;padding:10px 12px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font:inherit;resize:vertical}
+.bulk-add-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
+.bulk-add-actions span{color:var(--muted);font-size:13px}
+.bulk-add-actions button{min-height:44px;padding:0 20px;border:0;background:var(--coral);color:var(--white);font-weight:700;cursor:pointer}
+.bulk-add-actions button:hover{background:var(--coral-dark)}
+.bulk-add-actions button:disabled{opacity:.45;cursor:not-allowed}
+.bulk-add-success{margin:10px 0 0;color:var(--forest);font-size:13px;font-weight:700}
+
+/* Recovery code (setup, reset, and the in-app "رمز الاسترجاع" panel) */
+.recovery-code-display{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:22px 0;padding:16px;border:1px dashed var(--forest);background:color-mix(in srgb,var(--forest) 6%,var(--white))}
+.recovery-code-display code{font:700 17px/1.5 "IBM Plex Mono",monospace;letter-spacing:.03em;color:var(--forest);word-break:break-all}
+.recovery-code-display button{flex:none;min-height:38px;padding:0 14px;border:1px solid var(--forest);background:transparent;color:var(--forest);font-weight:700;cursor:pointer}
+.recovery-code-display button:hover{background:var(--forest);color:var(--white)}
+.recovery-confirm{display:flex;align-items:flex-start;gap:10px;margin:6px 0 20px;color:var(--ink);font-size:13px;line-height:1.6;cursor:pointer}
+.recovery-confirm input{margin-top:3px}
+.recovery-empty{margin:20px 0;color:var(--muted);font-size:14px;line-height:1.8}
+.auth-forgot-link,.auth-back-link{display:inline-block;margin-top:14px;border:0;background:transparent;padding:0;color:var(--muted);font-size:13px;font-weight:700;text-decoration:underline;cursor:pointer}
+.auth-forgot-link:hover,.auth-back-link:hover{color:var(--coral-dark)}
+@media(max-width:420px){.recovery-code-display{flex-direction:column;align-items:stretch;text-align:center}.recovery-code-display code{font-size:15px}}

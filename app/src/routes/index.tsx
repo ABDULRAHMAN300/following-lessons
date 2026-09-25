@@ -2,11 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import {
   Atom,
+  CaretDown,
+  CaretUp,
   Check,
   CloudArrowDown,
   CloudCheck,
   ClipboardText,
   Flask,
+  Key,
   Leaf,
   LockKey,
   MagnifyingGlass,
@@ -26,13 +29,16 @@ import { scrollScrubScenes, scrollScrubTheme } from "@/scroll-scrub-scenes";
 import { appearancePresets, defaultAppearance, type Appearance } from "@/lib/appearance";
 import {
   authenticateOwner,
+  generateRecoveryCode,
   getAppearance,
   getAuthState,
   listLessons,
   mutateLesson,
+  resetPassword,
   updateAppearance,
   type Lesson,
 } from "@/lib/lesson.functions";
+import { describeRequestError } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({ component: Index });
 
@@ -42,7 +48,9 @@ type Filter = "all" | "open" | "done";
 type LessonMutation =
   | { action: "create"; subject: Subject; grade: 10 | 11 | 12; title: string; part: SciencePart }
   | { action: "update"; id: string; title?: string; completed?: boolean }
-  | { action: "delete"; id: string };
+  | { action: "delete"; id: string }
+  | { action: "bulk_create"; subject: Subject; grade: 10 | 11 | 12; part: SciencePart; titles: string[] }
+  | { action: "reorder"; id: string; direction: "up" | "down" };
 
 const subjects: Array<{ id: Subject; name: string; note: string; grades: Array<10 | 11 | 12> }> = [
   { id: "chemistry", name: "الكيمياء", note: "المادة والتفاعلات", grades: [10, 11, 12] },
@@ -106,6 +114,7 @@ function Workspace() {
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [workspaceView, setWorkspaceView] = useState<"lessons" | "students">("lessons");
   const [studentRefreshKey, setStudentRefreshKey] = useState(0);
+  const [recoveryPanelOpen, setRecoveryPanelOpen] = useState(false);
   const savedTimer = useRef<number | null>(null);
 
   function markSaved() {
@@ -128,8 +137,9 @@ function Workspace() {
       setAppearanceDraft(appearanceData.appearance);
       setError("");
       markSaved();
-    } catch {
-      if (!options?.quiet) setError("تعذر جلب الدروس. تحقق من الاتصال ثم حاول مجددًا.");
+    } catch (err) {
+      if (!options?.quiet)
+        setError(describeRequestError(err, "تعذر جلب الدروس بسبب خطأ غير متوقع. حاول لاحقًا."));
       setSync("idle");
     }
   }
@@ -167,8 +177,8 @@ function Workspace() {
         setSetupRequired(data.setupRequired);
         setAuth(data.authenticated ? "ready" : "guest");
         if (data.authenticated) await loadWorkspace();
-      } catch {
-        setError("تعذر الاتصال بالخادم. حاول مجددًا.");
+      } catch (err) {
+        setError(describeRequestError(err, "تعذر التحقق من حالة الدخول بسبب خطأ غير متوقع. حاول لاحقًا."));
         setAuth("guest");
       }
     })();
@@ -189,6 +199,9 @@ function Workspace() {
   );
   const completed = selected.filter((lesson) => lesson.completed).length;
   const percent = selected.length ? Math.round((completed / selected.length) * 100) : 0;
+  // Reordering swaps positions in the full, unfiltered list — only safe (and
+  // only meaningful) to offer while no search/filter is narrowing the view.
+  const reorderEnabled = filter === "all" && query.trim() === "";
   const activeAppearance = appearanceOpen ? appearanceDraft : appearance;
   const subjectColors: Record<Subject, string> = {
     chemistry: activeAppearance.chemistryColor,
@@ -251,9 +264,9 @@ function Workspace() {
         return null;
       }
       markSaved();
-      return "lesson" in data && data.lesson ? data.lesson : true;
-    } catch {
-      setError("تعذر حفظ التغيير. بياناتك السابقة ما زالت محفوظة.");
+      return data;
+    } catch (err) {
+      setError(describeRequestError(err, "حدث خطأ غير متوقع أثناء الحفظ. بياناتك السابقة ما زالت محفوظة."));
       setSync("idle");
       return null;
     }
@@ -261,14 +274,15 @@ function Workspace() {
 
   async function addLesson(title: string, part: SciencePart) {
     const result = await mutate({ action: "create", subject, grade, title, part: subject === "integrated" ? part : "" });
-    if (result && result !== true) await loadWorkspace({ quiet: true });
+    if (result && "lesson" in result && result.lesson) await loadWorkspace({ quiet: true });
     return Boolean(result);
   }
 
   async function updateLesson(id: string, patch: { title?: string; completed?: boolean }) {
     const result = await mutate({ action: "update", id, ...patch });
-    if (result && result !== true) {
-      setLessons((current) => current.map((lesson) => (lesson.id === id ? result : lesson)));
+    if (result && "lesson" in result && result.lesson) {
+      const updatedLesson = result.lesson;
+      setLessons((current) => current.map((lesson) => (lesson.id === id ? updatedLesson : lesson)));
     }
     return Boolean(result);
   }
@@ -276,6 +290,22 @@ function Workspace() {
   async function deleteLesson(id: string) {
     const result = await mutate({ action: "delete", id });
     if (result) setLessons((current) => current.filter((lesson) => lesson.id !== id));
+    return Boolean(result);
+  }
+
+  async function bulkAddLessons(titles: string[], part: SciencePart) {
+    const result = await mutate({ action: "bulk_create", subject, grade, part: subject === "integrated" ? part : "", titles });
+    const created = result && "lessons" in result ? (result.lessons?.length ?? 0) : 0;
+    if (created) await loadWorkspace({ quiet: true });
+    return created;
+  }
+
+  async function reorderLesson(id: string, direction: "up" | "down") {
+    const result = await mutate({ action: "reorder", id, direction });
+    if (result && "lessons" in result && result.lessons?.length) {
+      const updatedById = new Map(result.lessons.map((lesson) => [lesson.id, lesson]));
+      setLessons((current) => current.map((lesson) => updatedById.get(lesson.id) ?? lesson));
+    }
     return Boolean(result);
   }
   async function saveAppearance(next: Appearance) {
@@ -294,8 +324,8 @@ function Workspace() {
       setAppearanceOpen(false);
       markSaved();
       return true;
-    } catch {
-      setError("تعذر حفظ الألوان. حاول مجددًا عند استقرار الاتصال.");
+    } catch (err) {
+      setError(describeRequestError(err, "تعذر حفظ الألوان بسبب خطأ غير متوقع. حاول لاحقًا."));
       setSync("idle");
       return false;
     }
@@ -362,6 +392,9 @@ function Workspace() {
             <button type="button" onClick={() => { void loadWorkspace(); setStudentRefreshKey((value) => value + 1); }} aria-label="تحديث البيانات">
               <CloudArrowDown /> <span className="action-label">تحديث</span>
             </button>
+            <button type="button" onClick={() => setRecoveryPanelOpen(true)}>
+              <Key /> <span>رمز الاسترجاع</span>
+            </button>
             <button type="button" onClick={() => void logout()}>
               <SignOut /> <span>خروج</span>
             </button>
@@ -420,7 +453,7 @@ function Workspace() {
               ))}
             </div>
           </div>
-          <AddLesson subject={subject} onAdd={addLesson} />
+          <AddLesson subject={subject} onAdd={addLesson} onBulkAdd={bulkAddLessons} />
           <div className="lesson-tools">
             <label className="search-box">
               <MagnifyingGlass />
@@ -467,25 +500,31 @@ function Workspace() {
                         <b>{part.label}</b>
                         <small>{partLessons.length} درس</small>
                       </header>
-                      {partLessons.map((lesson) => (
+                      {partLessons.map((lesson, partIndex) => (
                         <LessonRow
                           key={lesson.id}
                           lesson={lesson}
                           index={selected.findIndex((item) => item.id === lesson.id)}
                           onUpdate={updateLesson}
                           onDelete={deleteLesson}
+                          onReorder={reorderEnabled ? reorderLesson : undefined}
+                          canMoveUp={reorderEnabled && partIndex > 0}
+                          canMoveDown={reorderEnabled && partIndex < partLessons.length - 1}
                         />
                       ))}
                     </section>
                   );
                 })
-              : visible.map((lesson) => (
+              : visible.map((lesson, visibleIndex) => (
                   <LessonRow
                     key={lesson.id}
                     lesson={lesson}
                     index={selected.findIndex((item) => item.id === lesson.id)}
                     onUpdate={updateLesson}
                     onDelete={deleteLesson}
+                    onReorder={reorderEnabled ? reorderLesson : undefined}
+                    canMoveUp={reorderEnabled && visibleIndex > 0}
+                    canMoveDown={reorderEnabled && visibleIndex < visible.length - 1}
                   />
                 ))}
             {!visible.length && <EmptyState hasLessons={selected.length > 0} />}
@@ -504,7 +543,112 @@ function Workspace() {
           onSave={saveAppearance}
         />
       )}
+
+      {recoveryPanelOpen && (
+        <RecoveryCodePanel
+          onClose={() => setRecoveryPanelOpen(false)}
+          onUnauthorized={() => setAuth("guest")}
+        />
+      )}
     </section>
+  );
+}
+
+function RecoveryCodePanel({
+  onClose,
+  onUnauthorized,
+}: {
+  onClose: () => void;
+  onUnauthorized: () => void;
+}) {
+  const [code, setCode] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function generate() {
+    setBusy(true);
+    setError("");
+    try {
+      const data = await generateRecoveryCode();
+      if (!data.ok) {
+        if ("code" in data && data.code === "unauthorized") onUnauthorized();
+        setError(data.error ?? "تعذر توليد رمز الاسترجاع");
+        return;
+      }
+      setCode(data.recoveryCode);
+      setSaved(false);
+    } catch (err) {
+      setError(describeRequestError(err, "تعذر توليد رمز الاسترجاع بسبب خطأ غير متوقع. حاول لاحقًا."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy() {
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API unavailable in this context — the code is still visible to copy by hand.
+    }
+  }
+
+  return (
+    <div
+      className="appearance-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="appearance-panel" role="dialog" aria-modal="true" aria-labelledby="recovery-title">
+        <header>
+          <div>
+            <span className="eyebrow">لو نسيت كلمة المرور</span>
+            <h3 id="recovery-title">رمز الاسترجاع</h3>
+          </div>
+          <button type="button" className="appearance-close" onClick={onClose} aria-label="إغلاق">
+            <X />
+          </button>
+        </header>
+        <p>
+          رمز الاسترجاع هو طريقتك لاستعادة الدخول لو نسيت كلمة المرور، بدون الحاجة لأي بريد إلكتروني. كل مرة تولّد فيها رمزًا جديدًا، الرمز القديم يتوقف عن العمل فورًا.
+        </p>
+        {error && (
+          <p className="inline-error" role="alert">
+            {error}
+          </p>
+        )}
+        {code ? (
+          <>
+            <div className="recovery-code-display" dir="ltr">
+              <code>{code}</code>
+              <button type="button" onClick={() => void copy()}>
+                {copied ? <Check weight="bold" /> : "نسخ"}
+              </button>
+            </div>
+            <label className="recovery-confirm">
+              <input type="checkbox" checked={saved} onChange={(event) => setSaved(event.target.checked)} />
+              <span>حفظت هذا الرمز في مكان آمن (مثل ملاحظاتي أو مدير كلمات المرور)</span>
+            </label>
+          </>
+        ) : (
+          <p className="recovery-empty">لا يوجد رمز استرجاع مُفعّل بعد لهذا الحساب. اضغط "توليد رمز" لإنشاء واحد الآن.</p>
+        )}
+        <footer>
+          <button type="button" className="appearance-reset" onClick={() => void generate()} disabled={busy}>
+            {busy ? "لحظة..." : code ? "توليد رمز جديد" : "توليد رمز"}
+          </button>
+          <button type="button" className="appearance-save" onClick={onClose} disabled={Boolean(code) && !saved}>
+            {code ? "تم، إغلاق" : "إغلاق"}
+          </button>
+        </footer>
+      </section>
+    </div>
   );
 }
 
@@ -691,6 +835,8 @@ function ColorField({
   );
 }
 
+type AuthMode = "auth" | "recover" | "show-code";
+
 function AuthPanel({
   setupRequired,
   onReady,
@@ -698,10 +844,18 @@ function AuthPanel({
   setupRequired: boolean;
   onReady: () => Promise<void>;
 }) {
+  const [mode, setMode] = useState<AuthMode>("auth");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [recoveryCodeInput, setRecoveryCodeInput] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [revealedCode, setRevealedCode] = useState("");
+  const [codeContext, setCodeContext] = useState<"setup" | "reset">("setup");
+  const [codeSaved, setCodeSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -715,12 +869,175 @@ function AuthPanel({
         setError(data.error ?? "تعذر تسجيل الدخول");
         return;
       }
+      if (setupRequired && "recoveryCode" in data && data.recoveryCode) {
+        setRevealedCode(data.recoveryCode);
+        setCodeContext("setup");
+        setCodeSaved(false);
+        setMode("show-code");
+        return;
+      }
       await onReady();
-    } catch {
-      setError("تعذر الاتصال بالخادم. حاول مجددًا.");
+    } catch (err) {
+      setError(
+        describeRequestError(
+          err,
+          setupRequired
+            ? "تعذر إنشاء الحساب بسبب خطأ غير متوقع. حاول لاحقًا."
+            : "حدث خطأ غير متوقع أثناء تسجيل الدخول. حاول لاحقًا، وإذا استمر تواصل للدعم الفني.",
+        ),
+      );
     } finally {
       setBusy(false);
     }
+  }
+
+  async function submitRecover(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    if (newPassword !== confirmPassword) {
+      setError("كلمتا المرور غير متطابقتين");
+      return;
+    }
+    setBusy(true);
+    try {
+      const data = await resetPassword({ data: { code: recoveryCodeInput, password: newPassword } });
+      if (!data.ok) {
+        setError(data.error ?? "تعذر إعادة تعيين كلمة المرور");
+        return;
+      }
+      setRevealedCode(data.recoveryCode);
+      setCodeContext("reset");
+      setCodeSaved(false);
+      setMode("show-code");
+    } catch (err) {
+      setError(describeRequestError(err, "تعذر إعادة تعيين كلمة المرور بسبب خطأ غير متوقع. حاول لاحقًا."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(revealedCode);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API unavailable in this context — the code is still visible to copy by hand.
+    }
+  }
+
+  if (mode === "show-code") {
+    return (
+      <section id="workspace" className="workspace auth-section">
+        <div className="auth-shell">
+          <div className="auth-visual">
+            <img src="/assets/brand/cover-scene.png" alt="" role="presentation" />
+            <div>
+              <WaveSine weight="duotone" />
+              <span>مساحتك العلمية، على كل أجهزتك</span>
+            </div>
+          </div>
+          <div className="auth-card">
+            <span className="auth-icon">
+              <Key weight="duotone" />
+            </span>
+            <h2>{codeContext === "setup" ? "احفظ رمز الاسترجاع" : "رمز الاسترجاع الجديد"}</h2>
+            <p>
+              {codeContext === "setup"
+                ? "هذا الرمز هو طريقتك الوحيدة لاستعادة الدخول لو نسيت كلمة المرور مستقبلًا. يظهر مرة واحدة فقط الآن."
+                : "تم تحديث رمز الاسترجاع. الرمز القديم لم يعد صالحًا — احفظ هذا الرمز الجديد بدلًا منه."}
+            </p>
+            <div className="recovery-code-display" dir="ltr">
+              <code>{revealedCode}</code>
+              <button type="button" onClick={() => void copyCode()}>
+                {copied ? <Check weight="bold" /> : "نسخ"}
+              </button>
+            </div>
+            <label className="recovery-confirm">
+              <input type="checkbox" checked={codeSaved} onChange={(event) => setCodeSaved(event.target.checked)} />
+              <span>حفظت هذا الرمز في مكان آمن (مثل ملاحظاتي أو مدير كلمات المرور)</span>
+            </label>
+            <button className="auth-submit" disabled={!codeSaved} onClick={() => void onReady()}>
+              متابعة
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (mode === "recover") {
+    return (
+      <section id="workspace" className="workspace auth-section">
+        <div className="auth-shell">
+          <div className="auth-visual">
+            <img src="/assets/brand/cover-scene.png" alt="" role="presentation" />
+            <div>
+              <WaveSine weight="duotone" />
+              <span>مساحتك العلمية، على كل أجهزتك</span>
+            </div>
+          </div>
+          <form className="auth-card" onSubmit={(event) => void submitRecover(event)}>
+            <span className="auth-icon">
+              <Key weight="duotone" />
+            </span>
+            <h2>استرجاع الدخول</h2>
+            <p>أدخل رمز الاسترجاع الذي حفظته، ثم اختر كلمة مرور جديدة.</p>
+            <label>
+              رمز الاسترجاع
+              <input
+                dir="ltr"
+                required
+                value={recoveryCodeInput}
+                onChange={(event) => setRecoveryCodeInput(event.target.value)}
+                placeholder="XXXX-XXXX-XXXX-XXXX"
+              />
+            </label>
+            <label>
+              كلمة المرور الجديدة
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={10}
+                required
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+              />
+              <small>10 أحرف على الأقل</small>
+            </label>
+            <label>
+              تأكيد كلمة المرور
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={10}
+                required
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+              />
+            </label>
+            {error && (
+              <p className="inline-error" role="alert">
+                {error}
+              </p>
+            )}
+            <button className="auth-submit" disabled={busy}>
+              {busy ? "لحظة..." : "إعادة تعيين وتسجيل الدخول"}
+            </button>
+            <button
+              type="button"
+              className="auth-back-link"
+              onClick={() => {
+                setMode("auth");
+                setError("");
+              }}
+            >
+              رجوع لتسجيل الدخول
+            </button>
+          </form>
+        </div>
+      </section>
+    );
   }
 
   return (
@@ -773,6 +1090,11 @@ function AuthPanel({
           <button className="auth-submit" disabled={busy}>
             {busy ? "لحظة..." : setupRequired ? "إنشاء المساحة" : "دخول"}
           </button>
+          {!setupRequired && (
+            <button type="button" className="auth-forgot-link" onClick={() => { setMode("recover"); setError(""); }}>
+              نسيت كلمة المرور؟
+            </button>
+          )}
         </form>
       </div>
     </section>
@@ -782,13 +1104,20 @@ function AuthPanel({
 function AddLesson({
   subject,
   onAdd,
+  onBulkAdd,
 }: {
   subject: Subject;
   onAdd: (title: string, part: SciencePart) => Promise<boolean>;
+  onBulkAdd: (titles: string[], part: SciencePart) => Promise<number>;
 }) {
   const [title, setTitle] = useState("");
   const [part, setPart] = useState<Exclude<SciencePart, "">>("physics");
   const [busy, setBusy] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("");
+  const bulkTitles = bulkText.split("\n").map((line) => line.trim()).filter(Boolean);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -797,6 +1126,23 @@ function AddLesson({
     setBusy(true);
     if (await onAdd(clean, subject === "integrated" ? part : "")) setTitle("");
     setBusy(false);
+  }
+
+  async function submitBulk(event: FormEvent) {
+    event.preventDefault();
+    if (!bulkTitles.length) return;
+    setBulkBusy(true);
+    setBulkMessage("");
+    const created = await onBulkAdd(bulkTitles, subject === "integrated" ? part : "");
+    setBulkBusy(false);
+    if (created > 0) {
+      setBulkMessage(created === 1 ? "تمت إضافة درس واحد." : `تمت إضافة ${created} دروس.`);
+      setBulkText("");
+      window.setTimeout(() => {
+        setBulkOpen(false);
+        setBulkMessage("");
+      }, 1400);
+    }
   }
 
   return (
@@ -831,6 +1177,31 @@ function AddLesson({
         </label>
         <button disabled={busy || !title.trim()}>{busy ? "يُضاف..." : "إضافة الدرس"}</button>
       </form>
+      <button type="button" className="bulk-add-toggle" onClick={() => setBulkOpen((value) => !value)}>
+        <ClipboardText weight="bold" /> {bulkOpen ? "إغلاق الإضافة الجماعية" : "إضافة عدة دروس دفعة واحدة"}
+      </button>
+      {bulkOpen && (
+        <form className="bulk-add-form" onSubmit={(event) => void submitBulk(event)}>
+          <label>
+            <span className="sr-only">عناوين الدروس، كل درس بسطر مستقل</span>
+            <textarea
+              rows={5}
+              value={bulkText}
+              onChange={(event) => setBulkText(event.target.value)}
+              placeholder={"اكتب عنوان كل درس بسطر مستقل، مثال:\nالدرس الأول\nالدرس الثاني\nالدرس الثالث"}
+            />
+          </label>
+          <div className="bulk-add-actions">
+            <span>{bulkTitles.length} درس جاهز للإضافة</span>
+            <button disabled={bulkBusy || !bulkTitles.length}>{bulkBusy ? "يُضاف..." : "إضافة الكل"}</button>
+          </div>
+          {bulkMessage && (
+            <p className="bulk-add-success" role="status">
+              {bulkMessage}
+            </p>
+          )}
+        </form>
+      )}
     </div>
   );
 }
@@ -840,22 +1211,36 @@ function LessonRow({
   index,
   onUpdate,
   onDelete,
+  onReorder,
+  canMoveUp,
+  canMoveDown,
 }: {
   lesson: Lesson;
   index: number;
   onUpdate: (id: string, patch: { title?: string; completed?: boolean }) => Promise<boolean>;
   onDelete: (id: string) => Promise<boolean>;
+  onReorder?: (id: string, direction: "up" | "down") => Promise<boolean>;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(lesson.title);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [reordering, setReordering] = useState(false);
 
   async function toggle() {
     if (busy) return;
     setBusy(true);
     await onUpdate(lesson.id, { completed: !lesson.completed });
     setBusy(false);
+  }
+
+  async function move(direction: "up" | "down") {
+    if (!onReorder || busy || reordering) return;
+    setReordering(true);
+    await onReorder(lesson.id, direction);
+    setReordering(false);
   }
 
   async function save() {
@@ -914,6 +1299,26 @@ function LessonRow({
         )}
       </div>
       <div className="row-actions">
+        {onReorder && (
+          <span className="lesson-reorder">
+            <button
+              type="button"
+              disabled={!canMoveUp || busy || reordering}
+              onClick={() => void move("up")}
+              aria-label="نقل الدرس للأعلى"
+            >
+              <CaretUp weight="bold" />
+            </button>
+            <button
+              type="button"
+              disabled={!canMoveDown || busy || reordering}
+              onClick={() => void move("down")}
+              aria-label="نقل الدرس للأسفل"
+            >
+              <CaretDown weight="bold" />
+            </button>
+          </span>
+        )}
         {editing ? (
           <>
             <button
